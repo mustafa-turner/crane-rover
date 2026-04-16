@@ -18,3 +18,15 @@ logging:
 
 status:
   printIntervalSec: 2
+
+blynk:
+  enabled: true
+  broker: blynk.cloud
+  port: 8883
+  username: device
+  authToken: your_blynk_device_auth_token
+  templateId: TMPLxxxxxxx
+  firmwareVersion: 0.1.0
+  publishIntervalSec: 2
+  useTls: true
+  keepaliveSec: 45

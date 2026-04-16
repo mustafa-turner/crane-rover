@@ -1,15 +1,32 @@
 import base64
+import json
 import logging
 import socket
+import ssl
 import sys
 import threading
 import time
 from dataclasses import dataclass
 from typing import Optional
 
+import paho.mqtt.client as mqtt
 import serial
 import yaml
 from pynmeagps import NMEAReader
+
+
+FIX_MODE_ENUM = {
+    "NO FIX": 0,
+    "GNSS FIX": 1,
+    "DGPS": 2,
+    "RTK FLOAT": 3,
+    "RTK FIXED": 4,
+}
+
+NTRIP_STATUS_ENUM = {
+    False: 0,  # DISCONNECTED
+    True: 1,   # CONNECTED
+}
 
 
 @dataclass
@@ -107,9 +124,7 @@ def read_http_header(sock: socket.socket) -> bytes:
 
 def validate_ntrip_response(header: bytes) -> None:
     header_text = header.decode("latin1", errors="ignore")
-    print("\n=== NTRIP RESPONSE HEADER ===")
-    print(header_text)
-    print("=== END HEADER ===\n")
+    logging.debug("NTRIP response header:\n%s", header_text)
 
     first_line = header_text.splitlines()[0] if header_text.splitlines() else ""
 
@@ -134,13 +149,10 @@ def update_status_from_gga(parsed) -> None:
 
 def update_status_from_gsa(parsed) -> None:
     with STATUS_LOCK:
-        pdop = getattr(parsed, "PDOP", None)
         hdop = getattr(parsed, "HDOP", None)
         if hdop is not None:
             STATUS.hdop = hdop
         STATUS.last_nmea_at = time.time()
-    if pdop is not None:
-        logging.debug("PDOP: %s", pdop)
 
 
 def nmea_reader_loop(ser: serial.Serial, stop_event: threading.Event) -> None:
@@ -150,10 +162,7 @@ def nmea_reader_loop(ser: serial.Serial, stop_event: threading.Event) -> None:
     while not stop_event.is_set():
         try:
             raw_data, parsed_data = reader.read()
-            if raw_data is None:
-                continue
-
-            if parsed_data is None:
+            if raw_data is None or parsed_data is None:
                 continue
 
             msg_id = getattr(parsed_data, "msgID", "")
@@ -207,7 +216,7 @@ def ntrip_loop(ser: serial.Serial, ntrip_cfg: dict, stop_event: threading.Event)
             while not stop_event.is_set():
                 data = sock.recv(chunk_size)
                 logging.debug("Received %d RTCM bytes", len(data))
-                
+
                 if not data:
                     raise ConnectionError("NTRIP connection closed by server")
 
@@ -283,6 +292,118 @@ def status_printer_loop(interval_sec: int, stop_event: threading.Event) -> None:
         stop_event.wait(interval_sec)
 
 
+def get_blynk_payload() -> dict:
+    with STATUS_LOCK:
+        lat = STATUS.latitude
+        lon = STATUS.longitude
+        alt = STATUS.altitude_m
+        sats = STATUS.satellites
+        hdop = STATUS.hdop
+        fix_label = STATUS.fix_label
+        ntrip_connected = STATUS.ntrip_connected
+        last_rtcm_received_at = STATUS.last_rtcm_received_at
+
+    now = time.time()
+    rtcm_age_sec = 999.0
+    if last_rtcm_received_at is not None:
+        rtcm_age_sec = max(0.0, now - last_rtcm_received_at)
+
+    payload = {
+        "latitude": lat if lat is not None else 0.0,
+        "longitude": lon if lon is not None else 0.0,
+        "altitude_m": alt if alt is not None else 0.0,
+        "satellites": sats if sats is not None else 0,
+        "hdop": hdop if hdop is not None else 99.0,
+        "rtcm_age_sec": round(rtcm_age_sec, 1),
+        "fix_mode": FIX_MODE_ENUM.get(fix_label, 0),
+        "ntrip_status": NTRIP_STATUS_ENUM[ntrip_connected],
+    }
+
+    if lat is not None and lon is not None:
+        payload["position"] = [lon, lat]
+
+    return payload
+
+
+def publish_blynk_info(client: mqtt.Client, blynk_cfg: dict) -> None:
+    info_payload = {
+        "tmpl": blynk_cfg.get("templateId", ""),
+        "ver": blynk_cfg.get("firmwareVersion", "0.1.0"),
+        "build": time.strftime("%b %d %Y %H:%M:%S"),
+        "type": blynk_cfg.get("templateId", ""),
+        "rxbuff": 1024,
+    }
+    client.publish("info/mcu", json.dumps(info_payload), qos=0, retain=False)
+
+
+def on_blynk_connect(client, userdata, flags, reason_code, properties=None):
+    if reason_code == 0:
+        logging.info("Blynk MQTT connected")
+        client.subscribe("downlink/#", qos=0)
+        publish_blynk_info(client, userdata["blynk_cfg"])
+    else:
+        logging.error("Blynk MQTT connect failed, reason_code=%s", reason_code)
+
+
+def on_blynk_message(client, userdata, msg):
+    if msg.topic == "downlink/redirect":
+        redirect_uri = msg.payload.decode("utf-8", errors="ignore").strip()
+        logging.warning("Blynk redirect received: %s", redirect_uri)
+        logging.warning("Set broker in config to your regional endpoint if needed.")
+
+
+def blynk_loop(blynk_cfg: dict, stop_event: threading.Event) -> None:
+    broker = blynk_cfg.get("broker", "blynk.cloud")
+    port = int(blynk_cfg.get("port", 8883))
+    username = blynk_cfg.get("username", "device")
+    password = blynk_cfg["authToken"]
+    keepalive = int(blynk_cfg.get("keepaliveSec", 45))
+    publish_interval = int(blynk_cfg.get("publishIntervalSec", 2))
+    use_tls = bool(blynk_cfg.get("useTls", True))
+
+    client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        client_id="",
+        clean_session=True,
+    )
+    client.username_pw_set(username, password)
+    client.user_data_set({"blynk_cfg": blynk_cfg})
+    client.on_connect = on_blynk_connect
+    client.on_message = on_blynk_message
+
+    if use_tls:
+        client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
+        client.tls_insecure_set(False)
+
+    while not stop_event.is_set():
+        try:
+            logging.info("Connecting to Blynk MQTT %s:%s", broker, port)
+            client.connect(broker, port, keepalive=keepalive)
+            client.loop_start()
+
+            while not stop_event.is_set():
+                payload = get_blynk_payload()
+                client.publish("batch_ds", json.dumps(payload), qos=0, retain=False)
+                logging.debug("Published to Blynk: %s", payload)
+                stop_event.wait(publish_interval)
+
+            break
+
+        except Exception as exc:
+            logging.error("Blynk MQTT error: %s", exc)
+            stop_event.wait(5)
+
+        finally:
+            try:
+                client.loop_stop()
+            except Exception:
+                pass
+            try:
+                client.disconnect()
+            except Exception:
+                pass
+
+
 def main() -> int:
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     config = load_config(config_path)
@@ -291,6 +412,7 @@ def main() -> int:
 
     serial_cfg = config["serial"]
     status_cfg = config.get("status", {})
+    blynk_cfg = config.get("blynk", {})
 
     ser = open_serial(serial_cfg)
     stop_event = threading.Event()
@@ -311,9 +433,19 @@ def main() -> int:
         daemon=True,
     )
 
+    blynk_thread = None
+    if blynk_cfg.get("enabled", False):
+        blynk_thread = threading.Thread(
+            target=blynk_loop,
+            args=(blynk_cfg, stop_event),
+            daemon=True,
+        )
+
     nmea_thread.start()
     ntrip_thread.start()
     printer_thread.start()
+    if blynk_thread is not None:
+        blynk_thread.start()
 
     logging.info("Stage 1 rover started.")
 
@@ -327,6 +459,8 @@ def main() -> int:
         nmea_thread.join(timeout=2)
         ntrip_thread.join(timeout=2)
         printer_thread.join(timeout=2)
+        if blynk_thread is not None:
+            blynk_thread.join(timeout=2)
         ser.close()
 
     return 0

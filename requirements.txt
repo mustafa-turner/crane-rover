@@ -1,3 +1,4 @@
 pyserial
 PyYAML
 pynmeagps
+paho-mqtt
