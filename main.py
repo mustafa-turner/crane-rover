@@ -48,6 +48,9 @@ class RoverStatus:
 STATUS_LOCK = threading.Lock()
 STATUS = RoverStatus()
 
+LATEST_GGA_LOCK = threading.Lock()
+LATEST_GGA: Optional[str] = None
+
 
 def load_config(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as f:
@@ -155,6 +158,37 @@ def update_status_from_gsa(parsed) -> None:
         STATUS.last_nmea_at = time.time()
 
 
+def store_latest_gga(raw_data: bytes) -> None:
+    global LATEST_GGA
+    try:
+        line = raw_data.decode("ascii", errors="ignore").strip()
+    except Exception:
+        return
+
+    if not line.startswith("$"):
+        return
+
+    with LATEST_GGA_LOCK:
+        LATEST_GGA = line
+
+
+def get_latest_gga() -> Optional[str]:
+    with LATEST_GGA_LOCK:
+        return LATEST_GGA
+
+
+def send_gga_to_caster(sock: socket.socket) -> bool:
+    gga = get_latest_gga()
+    if not gga:
+        logging.debug("No GGA available yet to send to caster")
+        return False
+
+    payload = (gga + "\r\n").encode("ascii", errors="ignore")
+    sock.sendall(payload)
+    logging.info("Sent GGA to caster: %s", gga)
+    return True
+
+
 def nmea_reader_loop(ser: serial.Serial, stop_event: threading.Event) -> None:
     logging.info("NMEA reader started on %s", ser.port)
     reader = NMEAReader(ser, validate=0)
@@ -168,6 +202,7 @@ def nmea_reader_loop(ser: serial.Serial, stop_event: threading.Event) -> None:
             msg_id = getattr(parsed_data, "msgID", "")
 
             if msg_id == "GGA":
+                store_latest_gga(raw_data)
                 update_status_from_gga(parsed_data)
             elif msg_id == "GSA":
                 update_status_from_gsa(parsed_data)
@@ -193,6 +228,10 @@ def ntrip_loop(ser: serial.Serial, ntrip_cfg: dict, stop_event: threading.Event)
     reconnect_delay = int(ntrip_cfg.get("reconnectDelaySec", 5))
     chunk_size = int(ntrip_cfg.get("chunkSize", 1024))
 
+    gga_forward_enabled = bool(ntrip_cfg.get("ggaForwardEnabled", True))
+    gga_forward_interval = int(ntrip_cfg.get("ggaForwardIntervalSec", 5))
+    recv_poll_timeout = float(ntrip_cfg.get("recvPollTimeoutSec", 1.0))
+
     logging.info("NTRIP loop started for %s:%s/%s", host, port, mountpoint)
 
     while not stop_event.is_set():
@@ -201,7 +240,7 @@ def ntrip_loop(ser: serial.Serial, ntrip_cfg: dict, stop_event: threading.Event)
             logging.info("Connecting to NTRIP caster %s:%s mountpoint=%s", host, port, mountpoint)
 
             sock = socket.create_connection((host, port), timeout=connect_timeout)
-            sock.settimeout(read_timeout)
+            sock.settimeout(recv_poll_timeout)
 
             request = build_ntrip_request(host, port, mountpoint, username, password)
             sock.sendall(request)
@@ -213,18 +252,45 @@ def ntrip_loop(ser: serial.Serial, ntrip_cfg: dict, stop_event: threading.Event)
                 STATUS.ntrip_connected = True
                 STATUS.ntrip_last_error = None
 
+            last_rtcm_data_at = time.time()
+            last_gga_sent_at = 0.0
+
+            if gga_forward_enabled:
+                try:
+                    if send_gga_to_caster(sock):
+                        last_gga_sent_at = time.time()
+                except Exception as exc:
+                    logging.warning("Initial GGA send failed: %s", exc)
+
             while not stop_event.is_set():
-                data = sock.recv(chunk_size)
-                logging.debug("Received %d RTCM bytes", len(data))
+                now = time.time()
 
-                if not data:
-                    raise ConnectionError("NTRIP connection closed by server")
+                if gga_forward_enabled and (now - last_gga_sent_at >= gga_forward_interval):
+                    try:
+                        if send_gga_to_caster(sock):
+                            last_gga_sent_at = time.time()
+                    except Exception as exc:
+                        raise ConnectionError(f"GGA send failed: {exc}") from exc
 
-                ser.write(data)
-                ser.flush()
+                try:
+                    data = sock.recv(chunk_size)
+                    logging.debug("Received %d RTCM bytes", len(data))
 
-                with STATUS_LOCK:
-                    STATUS.last_rtcm_received_at = time.time()
+                    if not data:
+                        raise ConnectionError("NTRIP connection closed by server")
+
+                    ser.write(data)
+                    ser.flush()
+
+                    now = time.time()
+                    last_rtcm_data_at = now
+
+                    with STATUS_LOCK:
+                        STATUS.last_rtcm_received_at = now
+
+                except socket.timeout:
+                    if time.time() - last_rtcm_data_at >= read_timeout:
+                        raise TimeoutError(f"No RTCM data received for {read_timeout} seconds")
 
         except Exception as exc:
             with STATUS_LOCK:
