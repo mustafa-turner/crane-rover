@@ -15,3 +15,6 @@ ntrip:
 
 logging:
   level: INFO
+
+status:
+  printIntervalSec: 2
