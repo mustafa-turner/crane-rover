@@ -71,16 +71,16 @@ def fmt_int(value: Optional[int]) -> str:
     return str(value)
 
 
-def build_ntrip_request(host: str, mountpoint: str, username: str, password: str) -> bytes:
+def build_ntrip_request(host: str, port: int, mountpoint: str, username: str, password: str) -> bytes:
     credentials = f"{username}:{password}".encode("utf-8")
     auth_b64 = base64.b64encode(credentials).decode("ascii")
 
     request = (
-        f"GET /{mountpoint} HTTP/1.0\r\n"
-        f"Host: {host}\r\n"
+        f"GET /{mountpoint} HTTP/1.1\r\n"
+        f"Host: {host}:{port}\r\n"
+        f"Ntrip-Version: Ntrip/2.0\r\n"
         f"User-Agent: NTRIP PythonClient/1.0\r\n"
         f"Authorization: Basic {auth_b64}\r\n"
-        f"Accept: */*\r\n"
         f"Connection: close\r\n"
         f"\r\n"
     )
@@ -107,6 +107,10 @@ def read_http_header(sock: socket.socket) -> bytes:
 
 def validate_ntrip_response(header: bytes) -> None:
     header_text = header.decode("latin1", errors="ignore")
+    print("\n=== NTRIP RESPONSE HEADER ===")
+    print(header_text)
+    print("=== END HEADER ===\n")
+
     first_line = header_text.splitlines()[0] if header_text.splitlines() else ""
 
     if "200 OK" in first_line or "ICY 200 OK" in first_line:
@@ -185,10 +189,12 @@ def ntrip_loop(ser: serial.Serial, ntrip_cfg: dict, stop_event: threading.Event)
     while not stop_event.is_set():
         sock: Optional[socket.socket] = None
         try:
+            logging.info("Connecting to NTRIP caster %s:%s mountpoint=%s", host, port, mountpoint)
+
             sock = socket.create_connection((host, port), timeout=connect_timeout)
             sock.settimeout(read_timeout)
 
-            request = build_ntrip_request(host, mountpoint, username, password)
+            request = build_ntrip_request(host, port, mountpoint, username, password)
             sock.sendall(request)
 
             header = read_http_header(sock)
@@ -200,6 +206,8 @@ def ntrip_loop(ser: serial.Serial, ntrip_cfg: dict, stop_event: threading.Event)
 
             while not stop_event.is_set():
                 data = sock.recv(chunk_size)
+                logging.debug("Received %d RTCM bytes", len(data))
+                
                 if not data:
                     raise ConnectionError("NTRIP connection closed by server")
 
