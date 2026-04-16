@@ -1,0 +1,17 @@
+serial:
+  port: /dev/serial0
+  baudrate: 115200
+
+ntrip:
+  host: your.ntrip.caster.host
+  port: 2101
+  mountpoint: your_mountpoint
+  username: your_username
+  password: your_password
+  connectTimeoutSec: 10
+  readTimeoutSec: 15
+  reconnectDelaySec: 5
+  chunkSize: 1024
+
+logging:
+  level: INFO
