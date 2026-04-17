@@ -1,17 +1,26 @@
 # RTK Stage 1
 
-Minimal rover script for:
+Minimal rover app for:
 - reading NMEA from the GNSS receiver
-- printing NMEA to stdout
+- printing rover status to the terminal
 - connecting to an NTRIP caster
 - forwarding RTCM corrections into the receiver over UART
+- publishing rover status to Blynk over MQTT
 
 ## Files
 
 - `main.py`
+- `rover/config.py` for config loading and logging setup
+- `rover/state.py` for shared rover state, GGA storage, and RTCM inspection
+- `rover/gnss.py` for serial access and NMEA parsing
+- `rover/ntrip.py` for NTRIP connection and RTCM forwarding
+- `rover/blynk.py` for MQTT publishing
+- `rover/status.py` for terminal status output
 - `requirements.txt`
 - `config.example.yaml`
 - `config.yaml` (local only, not committed)
+
+Each Python file now has one main responsibility, so the code stays compact without keeping every concern in one large script.
 
 ## Create venv
 
@@ -65,13 +74,13 @@ logging:
 ## Run
 
 ```bash
-python main.py config.yaml
+python3 main.py config.yaml
 ```
 
 Or:
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 ## Notes
@@ -80,6 +89,7 @@ python main.py
 - the script forwards the latest GGA sentence back to the caster when `ggaForwardEnabled` is `true`
 - the status output now shows whether the incoming RTCM stream contains station messages (`1005`/`1006`) and observation MSM messages (`107x`/`108x`/`109x`/`111x`/`112x`)
 - if NTRIP drops, the script will retry automatically
+- `main.py` is now only the bootstrap entrypoint; protocol logic lives under `rover/`
 
 ## Suggested .gitignore
 
