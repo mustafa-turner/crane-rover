@@ -53,6 +53,10 @@ ntrip:
   readTimeoutSec: 15
   reconnectDelaySec: 5
   chunkSize: 1024
+  ggaForwardEnabled: true
+  ggaForwardIntervalSec: 5
+  recvPollTimeoutSec: 1.0
+  rtcmLogIntervalSec: 10
 
 logging:
   level: INFO
@@ -73,7 +77,8 @@ python main.py
 ## Notes
 
 - recommended serial port: `/dev/serial0`
-- this stage does not send GGA back to the caster yet
+- the script forwards the latest GGA sentence back to the caster when `ggaForwardEnabled` is `true`
+- the status output now shows whether the incoming RTCM stream contains station messages (`1005`/`1006`) and observation MSM messages (`107x`/`108x`/`109x`/`111x`/`112x`)
 - if NTRIP drops, the script will retry automatically
 
 ## Suggested .gitignore

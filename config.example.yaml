@@ -15,6 +15,7 @@ ntrip:
   ggaForwardEnabled: true
   ggaForwardIntervalSec: 5
   recvPollTimeoutSec: 1.0
+  rtcmLogIntervalSec: 10
 
 logging:
   level: INFO
