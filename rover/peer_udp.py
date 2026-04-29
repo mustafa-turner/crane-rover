@@ -60,6 +60,14 @@ def combined_accuracy_m(local_accuracy_m: float | None, peer_accuracy_m: float |
     return math.sqrt((local_accuracy_m ** 2) + (peer_accuracy_m ** 2))
 
 
+def conservative_distance_m(distance_m: float | None, combined_accuracy_m_value: float | None) -> float | None:
+    if distance_m is None:
+        return None
+    if combined_accuracy_m_value is None:
+        return distance_m
+    return max(0.0, distance_m - combined_accuracy_m_value)
+
+
 def haversine_distance_m(
     lat1: float,
     lon1: float,
@@ -169,6 +177,8 @@ def build_peer_status_from_message(
             float(payload["longitude"]),
         )
 
+    combined_accuracy = combined_accuracy_m(local_accuracy_m, peer_accuracy_m)
+
     return PeerStatus(
         device_id=str(payload["device_id"]),
         latitude=payload.get("latitude"),
@@ -181,7 +191,8 @@ def build_peer_status_from_message(
         sent_at=float(payload.get("sent_at", now)),
         received_at=now,
         distance_m=distance_m,
-        combined_accuracy_m=combined_accuracy_m(local_accuracy_m, peer_accuracy_m),
+        combined_accuracy_m=combined_accuracy,
+        conservative_distance_m=conservative_distance_m(distance_m, combined_accuracy),
         source_host=source_host,
         max_message_age_sec=float(peer_cfg.get("maxPeerMessageAgeSec", 2.0)),
     )

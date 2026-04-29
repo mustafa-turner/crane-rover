@@ -46,7 +46,12 @@ def get_blynk_payload() -> dict:
     nearest_peer = None
     peers_with_distance = [peer for peer in fresh_peers if peer.distance_m is not None]
     if peers_with_distance:
-        nearest_peer = min(peers_with_distance, key=lambda peer: peer.distance_m)
+        nearest_peer = min(
+            peers_with_distance,
+            key=lambda peer: (
+                peer.conservative_distance_m if peer.conservative_distance_m is not None else peer.distance_m
+            ),
+        )
 
     payload = {
         "latitude": lat if lat is not None else 0.0,
@@ -67,6 +72,11 @@ def get_blynk_payload() -> dict:
         "peer_count": len(peers),
         "fresh_peer_count": len(fresh_peers),
         "nearest_peer_distance_m": round(nearest_peer.distance_m, 3) if nearest_peer and nearest_peer.distance_m is not None else -1.0,
+        "nearest_peer_safe_distance_m": (
+            round(nearest_peer.conservative_distance_m, 3)
+            if nearest_peer and nearest_peer.conservative_distance_m is not None
+            else -1.0
+        ),
         "nearest_peer_combined_accuracy_m": (
             round(nearest_peer.combined_accuracy_m, 3)
             if nearest_peer and nearest_peer.combined_accuracy_m is not None

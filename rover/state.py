@@ -71,6 +71,7 @@ class PeerStatus:
     received_at: Optional[float] = None
     distance_m: Optional[float] = None
     combined_accuracy_m: Optional[float] = None
+    conservative_distance_m: Optional[float] = None
     source_host: str = ""
     max_message_age_sec: float = 0.0
 

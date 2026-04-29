@@ -108,13 +108,14 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
                     or (peer.max_message_age_sec > 0 and peer_age_sec > peer.max_message_age_sec)
                 )
                 distance_text = fmt(peer.distance_m, 3) if not is_stale else "-"
-                combined_accuracy_text = fmt(peer.combined_accuracy_m, 3) if not is_stale else "-"
+                conservative_distance_text = fmt(peer.conservative_distance_m, 3) if not is_stale else "-"
+                uncertainty_text = fmt(peer.combined_accuracy_m, 3) if not is_stale else "-"
                 peer_age_text = "-" if peer_age_sec is None else f"{peer_age_sec:.1f}s"
                 freshness = "STALE" if is_stale else "FRESH"
                 print(
-                    f"{peer.device_id:<15} dist={distance_text} m age={peer_age_text} "
+                    f"{peer.device_id:<15} safe={conservative_distance_text} m raw={distance_text} m age={peer_age_text} "
                     f"fix={peer.fix_label} acc={fmt(peer.accuracy_m, 3)} m "
-                    f"combined={combined_accuracy_text} m {freshness}",
+                    f"uncertainty={uncertainty_text} m {freshness}",
                     flush=True,
                 )
         print("====================\n", flush=True)

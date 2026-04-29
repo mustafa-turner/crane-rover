@@ -128,7 +128,7 @@ python3 main.py
 - the Blynk payload includes `battery_percent`, `battery_voltage_v`, `battery_current_a`, `battery_power_w`, `battery_status`, and `battery_present`
 - peer UDP messages include device id, timestamp, lat/lon/alt, fix mode, HDOP, and estimated horizontal accuracy
 - peer distance is only treated as valid while the latest received message for that peer is newer than `peerUdp.maxPeerMessageAgeSec`
-- combined peer accuracy is calculated as root-sum-square of local and remote horizontal accuracy estimates
+- peer uncertainty is calculated as root-sum-square of local and remote horizontal accuracy estimates
 - if NTRIP drops, the script will retry automatically
 - `main.py` is now only the bootstrap entrypoint; protocol logic lives under `rover/`
 
