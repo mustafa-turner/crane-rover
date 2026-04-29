@@ -129,6 +129,7 @@ python3 main.py
 - peer UDP messages include device id, timestamp, lat/lon/alt, fix mode, HDOP, and estimated horizontal accuracy
 - peer distance is only treated as valid while the latest received message for that peer is newer than `peerUdp.maxPeerMessageAgeSec`
 - peer uncertainty is calculated as root-sum-square of local and remote horizontal accuracy estimates
+- the Blynk payload also includes `local_accuracy_m`, `nearest_peer_distance_m`, `nearest_peer_safe_distance_m`, `nearest_peer_uncertainty_m`, `nearest_peer_accuracy_m`, `nearest_peer_fix_mode`, and `nearest_peer_id`
 - if NTRIP drops, the script will retry automatically
 - `main.py` is now only the bootstrap entrypoint; protocol logic lives under `rover/`
 

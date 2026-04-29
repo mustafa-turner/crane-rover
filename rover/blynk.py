@@ -69,12 +69,15 @@ def get_blynk_payload() -> dict:
         "battery_status": battery_status,
         "battery_present": 1 if battery_present is True else 0 if battery_present is False else -1,
         "local_accuracy_m": round(local_horizontal_accuracy_m, 3) if local_horizontal_accuracy_m is not None else -1.0,
-        "peer_count": len(peers),
-        "fresh_peer_count": len(fresh_peers),
         "nearest_peer_distance_m": round(nearest_peer.distance_m, 3) if nearest_peer and nearest_peer.distance_m is not None else -1.0,
         "nearest_peer_safe_distance_m": (
             round(nearest_peer.conservative_distance_m, 3)
             if nearest_peer and nearest_peer.conservative_distance_m is not None
+            else -1.0
+        ),
+        "nearest_peer_uncertainty_m": (
+            round(nearest_peer.combined_accuracy_m, 3)
+            if nearest_peer and nearest_peer.combined_accuracy_m is not None
             else -1.0
         ),
         "nearest_peer_combined_accuracy_m": (
@@ -82,6 +85,13 @@ def get_blynk_payload() -> dict:
             if nearest_peer and nearest_peer.combined_accuracy_m is not None
             else -1.0
         ),
+        "nearest_peer_accuracy_m": (
+            round(nearest_peer.accuracy_m, 3)
+            if nearest_peer and nearest_peer.accuracy_m is not None
+            else -1.0
+        ),
+        "nearest_peer_fix_mode": FIX_MODE_ENUM.get(nearest_peer.fix_label, 0) if nearest_peer else 0,
+        "nearest_peer_id": nearest_peer.device_id if nearest_peer else "",
     }
     if lat is not None and lon is not None:
         payload["position"] = [lon, lat]
