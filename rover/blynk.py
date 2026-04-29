@@ -20,6 +20,10 @@ def get_blynk_payload() -> dict:
         fix_label = STATUS.fix_label
         ntrip_connected = STATUS.ntrip_connected
         last_rtcm_received_at = STATUS.last_rtcm_received_at
+        battery_percent = STATUS.battery_percent
+        battery_voltage_v = STATUS.battery_voltage_v
+        battery_status = STATUS.battery_status
+        battery_present = STATUS.battery_present
 
     now = time.time()
     rtcm_age_sec = 999.0
@@ -35,6 +39,10 @@ def get_blynk_payload() -> dict:
         "rtcm_age_sec": round(rtcm_age_sec, 1),
         "fix_mode": FIX_MODE_ENUM.get(fix_label, 0),
         "ntrip_status": NTRIP_STATUS_ENUM[ntrip_connected],
+        "battery_percent": round(battery_percent, 1) if battery_percent is not None else -1.0,
+        "battery_voltage_v": round(battery_voltage_v, 3) if battery_voltage_v is not None else 0.0,
+        "battery_status": battery_status,
+        "battery_present": 1 if battery_present is True else 0 if battery_present is False else -1,
     }
     if lat is not None and lon is not None:
         payload["position"] = [lon, lat]

@@ -23,6 +23,19 @@ logging:
 status:
   printIntervalSec: 2
 
+battery:
+  enabled: true
+  pollIntervalSec: 10
+  # Option 1: set basePath and let the code read common files under it.
+  # Example: /sys/class/power_supply/battery
+  # basePath: /sys/class/power_supply/battery
+  #
+  # Option 2: override individual paths if your UPS HAT uses different names.
+  # capacityPath: /sys/class/power_supply/battery/capacity
+  # voltageNowPath: /sys/class/power_supply/battery/voltage_now
+  # statusPath: /sys/class/power_supply/battery/status
+  # presentPath: /sys/class/power_supply/battery/present
+
 blynk:
   enabled: true
   broker: blynk.cloud

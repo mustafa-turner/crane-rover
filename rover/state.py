@@ -76,6 +76,12 @@ class RoverStatus:
     rtcm_has_station_frame: bool = False
     rtcm_has_observation_frame: bool = False
     rtcm_recent_types: str = "-"
+    battery_percent: Optional[float] = None
+    battery_voltage_v: Optional[float] = None
+    battery_status: str = "UNKNOWN"
+    battery_present: Optional[bool] = None
+    battery_last_update_at: Optional[float] = None
+    battery_last_error: Optional[str] = None
 
 
 STATUS_LOCK = threading.Lock()
@@ -177,6 +183,12 @@ def fmt_int(value: Optional[int]) -> str:
     return str(value)
 
 
+def fmt_percent(value: Optional[float], digits: int = 1) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.{digits}f}%"
+
+
 def store_latest_gga(raw_data: bytes) -> None:
     global LATEST_GGA
     try:
@@ -233,3 +245,20 @@ def update_status_from_rtcm(
                 msg_type in RTCM_OBSERVATION_TYPES for msg_type in rtcm_types
             )
             STATUS.rtcm_recent_types = inspector.describe_recent()
+
+
+def update_status_from_battery(
+    *,
+    percent: Optional[float],
+    voltage_v: Optional[float],
+    status: Optional[str],
+    present: Optional[bool],
+    error: Optional[str] = None,
+) -> None:
+    with STATUS_LOCK:
+        STATUS.battery_percent = percent
+        STATUS.battery_voltage_v = voltage_v
+        STATUS.battery_status = status or "UNKNOWN"
+        STATUS.battery_present = present
+        STATUS.battery_last_update_at = time.time()
+        STATUS.battery_last_error = error

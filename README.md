@@ -5,6 +5,7 @@ Minimal rover app for:
 - printing rover status to the terminal
 - connecting to an NTRIP caster
 - forwarding RTCM corrections into the receiver over UART
+- reading UPS battery status from Linux power-supply sysfs
 - publishing rover status to Blynk over MQTT
 
 ## Files
@@ -14,6 +15,7 @@ Minimal rover app for:
 - `rover/state.py` for shared rover state, GGA storage, and RTCM inspection
 - `rover/gnss.py` for serial access and NMEA parsing
 - `rover/ntrip.py` for NTRIP connection and RTCM forwarding
+- `rover/battery.py` for UPS battery monitoring
 - `rover/blynk.py` for MQTT publishing
 - `rover/status.py` for terminal status output
 - `requirements.txt`
@@ -69,6 +71,15 @@ ntrip:
 
 logging:
   level: INFO
+
+battery:
+  enabled: true
+  pollIntervalSec: 10
+  # basePath: /sys/class/power_supply/battery
+  # capacityPath: /sys/class/power_supply/battery/capacity
+  # voltageNowPath: /sys/class/power_supply/battery/voltage_now
+  # statusPath: /sys/class/power_supply/battery/status
+  # presentPath: /sys/class/power_supply/battery/present
 ```
 
 ## Run
@@ -88,6 +99,8 @@ python3 main.py
 - recommended serial port: `/dev/serial0`
 - the script forwards the latest GGA sentence back to the caster when `ggaForwardEnabled` is `true`
 - the status output now shows whether the incoming RTCM stream contains station messages (`1005`/`1006`) and observation MSM messages (`107x`/`108x`/`109x`/`111x`/`112x`)
+- the status output also shows battery level, voltage, status, and battery read age when `battery.enabled` is `true`
+- the Blynk payload includes `battery_percent`, `battery_voltage_v`, `battery_status`, and `battery_present`
 - if NTRIP drops, the script will retry automatically
 - `main.py` is now only the bootstrap entrypoint; protocol logic lives under `rover/`
 

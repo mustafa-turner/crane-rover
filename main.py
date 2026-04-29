@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 
+from rover.battery import battery_monitor_loop
 from rover.blynk import blynk_loop
 from rover.config import load_config, setup_logging
 from rover.gnss import nmea_reader_loop, open_serial
@@ -19,6 +20,7 @@ def main() -> int:
     serial_cfg = config["serial"]
     status_cfg = config.get("status", {})
     blynk_cfg = config.get("blynk", {})
+    battery_cfg = config.get("battery", {})
 
     ser = open_serial(serial_cfg)
     stop_event = threading.Event()
@@ -38,6 +40,13 @@ def main() -> int:
         args=(int(status_cfg.get("printIntervalSec", 2)), stop_event),
         daemon=True,
     )
+    battery_thread = None
+    if battery_cfg.get("enabled", False):
+        battery_thread = threading.Thread(
+            target=battery_monitor_loop,
+            args=(battery_cfg, stop_event),
+            daemon=True,
+        )
 
     blynk_thread = None
     if blynk_cfg.get("enabled", False):
@@ -50,6 +59,8 @@ def main() -> int:
     nmea_thread.start()
     ntrip_thread.start()
     printer_thread.start()
+    if battery_thread is not None:
+        battery_thread.start()
     if blynk_thread is not None:
         blynk_thread.start()
 
@@ -65,6 +76,8 @@ def main() -> int:
         nmea_thread.join(timeout=2)
         ntrip_thread.join(timeout=2)
         printer_thread.join(timeout=2)
+        if battery_thread is not None:
+            battery_thread.join(timeout=2)
         if blynk_thread is not None:
             blynk_thread.join(timeout=2)
         ser.close()
