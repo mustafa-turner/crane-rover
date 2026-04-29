@@ -5,8 +5,30 @@ from pathlib import Path
 
 from rover.state import update_status_from_battery
 
+try:
+    from smbus2 import SMBus
+except ImportError:  # pragma: no cover - fallback for Raspberry Pi OS packages
+    try:
+        from smbus import SMBus  # type: ignore
+    except ImportError:  # pragma: no cover - handled at runtime with clear error
+        SMBus = None  # type: ignore[assignment]
+
 
 DEFAULT_POWER_SUPPLY_ROOT = Path("/sys/class/power_supply")
+
+INA219_REG_CONFIG = 0x00
+INA219_REG_SHUNT_VOLTAGE = 0x01
+INA219_REG_BUS_VOLTAGE = 0x02
+INA219_REG_POWER = 0x03
+INA219_REG_CURRENT = 0x04
+INA219_REG_CALIBRATION = 0x05
+
+WAVESHARE_UPS_HAT_C_DEFAULT_I2C_BUS = 1
+WAVESHARE_UPS_HAT_C_DEFAULT_I2C_ADDRESS = 0x43
+WAVESHARE_UPS_HAT_C_DEFAULT_SHUNT_OHMS = 0.1
+WAVESHARE_UPS_HAT_C_DEFAULT_MAX_CURRENT_A = 3.2
+WAVESHARE_UPS_HAT_C_DEFAULT_MIN_VOLTAGE_V = 3.0
+WAVESHARE_UPS_HAT_C_DEFAULT_MAX_VOLTAGE_V = 4.2
 
 
 def read_text(path: Path) -> str:
@@ -37,6 +59,14 @@ def normalize_voltage(raw_value: float | None) -> float | None:
     return raw_value
 
 
+def clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(value, high))
+
+
+def signed_16(value: int) -> int:
+    return value - 65536 if value > 32767 else value
+
+
 def discover_battery_dir(root: Path = DEFAULT_POWER_SUPPLY_ROOT) -> Path | None:
     if not root.exists():
         return None
@@ -61,7 +91,77 @@ def resolve_battery_dir(battery_cfg: dict) -> Path | None:
     return discover_battery_dir()
 
 
-def read_battery_snapshot(battery_cfg: dict) -> dict:
+def read_register_word(bus: SMBus, address: int, register: int) -> int:
+    value = bus.read_word_data(address, register)
+    return ((value & 0xFF) << 8) | (value >> 8)
+
+
+def write_register_word(bus: SMBus, address: int, register: int, value: int) -> None:
+    swapped = ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
+    bus.write_word_data(address, register, swapped)
+
+
+def build_ina219_calibration(shunt_ohms: float, max_current_a: float) -> tuple[int, float]:
+    current_lsb = max_current_a / 32767.0
+    calibration = int(0.04096 / (current_lsb * shunt_ohms))
+    return calibration, current_lsb
+
+
+def voltage_to_percent(voltage_v: float, min_voltage_v: float, max_voltage_v: float) -> float:
+    if max_voltage_v <= min_voltage_v:
+        raise ValueError("battery maxVoltageV must be greater than minVoltageV")
+    return clamp(((voltage_v - min_voltage_v) / (max_voltage_v - min_voltage_v)) * 100.0, 0.0, 100.0)
+
+
+def read_waveshare_ups_hat_c_snapshot(battery_cfg: dict) -> dict:
+    if SMBus is None:
+        raise RuntimeError(
+            "Missing I2C library. Install `smbus2` with pip or `python3-smbus` on Raspberry Pi OS."
+        )
+
+    i2c_bus = int(battery_cfg.get("i2cBus", WAVESHARE_UPS_HAT_C_DEFAULT_I2C_BUS))
+    i2c_address = int(str(battery_cfg.get("i2cAddress", WAVESHARE_UPS_HAT_C_DEFAULT_I2C_ADDRESS)), 0)
+    shunt_ohms = float(battery_cfg.get("shuntOhms", WAVESHARE_UPS_HAT_C_DEFAULT_SHUNT_OHMS))
+    max_current_a = float(battery_cfg.get("maxCurrentA", WAVESHARE_UPS_HAT_C_DEFAULT_MAX_CURRENT_A))
+    min_voltage_v = float(battery_cfg.get("minVoltageV", WAVESHARE_UPS_HAT_C_DEFAULT_MIN_VOLTAGE_V))
+    max_voltage_v = float(battery_cfg.get("maxVoltageV", WAVESHARE_UPS_HAT_C_DEFAULT_MAX_VOLTAGE_V))
+
+    calibration, current_lsb = build_ina219_calibration(shunt_ohms, max_current_a)
+    power_lsb = current_lsb * 20.0
+
+    with SMBus(i2c_bus) as bus:
+        # 32V range, 320mV shunt range, 12-bit bus/shunt ADC, continuous shunt+bus conversion.
+        write_register_word(bus, i2c_address, INA219_REG_CONFIG, 0x3EEF)
+        write_register_word(bus, i2c_address, INA219_REG_CALIBRATION, calibration)
+
+        bus_voltage_raw = read_register_word(bus, i2c_address, INA219_REG_BUS_VOLTAGE)
+        current_raw = signed_16(read_register_word(bus, i2c_address, INA219_REG_CURRENT))
+        power_raw = read_register_word(bus, i2c_address, INA219_REG_POWER)
+
+    voltage_v = ((bus_voltage_raw >> 3) * 0.004)
+    current_a = current_raw * current_lsb
+    power_w = power_raw * power_lsb
+    percent = voltage_to_percent(voltage_v, min_voltage_v, max_voltage_v)
+
+    if current_a > 0.02:
+        status = "CHARGING"
+    elif current_a < -0.02:
+        status = "DISCHARGING"
+    else:
+        status = "IDLE"
+
+    return {
+        "percent": percent,
+        "voltage_v": voltage_v,
+        "current_a": current_a,
+        "power_w": power_w,
+        "status": status,
+        "present": True,
+        "source": f"waveshare-ups-hat-c i2c-{i2c_bus}@{hex(i2c_address)}",
+    }
+
+
+def read_sysfs_battery_snapshot(battery_cfg: dict) -> dict:
     battery_dir = resolve_battery_dir(battery_cfg)
     if battery_dir is None:
         raise FileNotFoundError("No battery power-supply directory found under /sys/class/power_supply")
@@ -91,10 +191,21 @@ def read_battery_snapshot(battery_cfg: dict) -> dict:
     return {
         "percent": percent,
         "voltage_v": voltage_v,
+        "current_a": None,
+        "power_w": None,
         "status": status,
         "present": present,
-        "battery_dir": str(battery_dir),
+        "source": str(battery_dir),
     }
+
+
+def read_battery_snapshot(battery_cfg: dict) -> dict:
+    driver = str(battery_cfg.get("driver", "waveshare-ups-hat-c")).strip().lower()
+    if driver == "waveshare-ups-hat-c":
+        return read_waveshare_ups_hat_c_snapshot(battery_cfg)
+    if driver == "sysfs":
+        return read_sysfs_battery_snapshot(battery_cfg)
+    raise ValueError(f"Unsupported battery driver: {driver}")
 
 
 def battery_monitor_loop(battery_cfg: dict, stop_event) -> None:
@@ -107,20 +218,24 @@ def battery_monitor_loop(battery_cfg: dict, stop_event) -> None:
             update_status_from_battery(
                 percent=snapshot["percent"],
                 voltage_v=snapshot["voltage_v"],
+                current_a=snapshot["current_a"],
+                power_w=snapshot["power_w"],
                 status=snapshot["status"],
                 present=snapshot["present"],
                 error=None,
             )
 
-            battery_dir = snapshot["battery_dir"]
-            if battery_dir != last_logged_source:
-                logging.info("Battery monitor using %s", battery_dir)
-                last_logged_source = battery_dir
+            source = snapshot["source"]
+            if source != last_logged_source:
+                logging.info("Battery monitor using %s", source)
+                last_logged_source = source
         except Exception as exc:
             logging.error("Battery monitor error: %s", exc)
             update_status_from_battery(
                 percent=None,
                 voltage_v=None,
+                current_a=None,
+                power_w=None,
                 status="ERROR",
                 present=None,
                 error=str(exc),

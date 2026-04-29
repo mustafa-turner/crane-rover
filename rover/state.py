@@ -78,6 +78,8 @@ class RoverStatus:
     rtcm_recent_types: str = "-"
     battery_percent: Optional[float] = None
     battery_voltage_v: Optional[float] = None
+    battery_current_a: Optional[float] = None
+    battery_power_w: Optional[float] = None
     battery_status: str = "UNKNOWN"
     battery_present: Optional[bool] = None
     battery_last_update_at: Optional[float] = None
@@ -251,6 +253,8 @@ def update_status_from_battery(
     *,
     percent: Optional[float],
     voltage_v: Optional[float],
+    current_a: Optional[float],
+    power_w: Optional[float],
     status: Optional[str],
     present: Optional[bool],
     error: Optional[str] = None,
@@ -258,6 +262,8 @@ def update_status_from_battery(
     with STATUS_LOCK:
         STATUS.battery_percent = percent
         STATUS.battery_voltage_v = voltage_v
+        STATUS.battery_current_a = current_a
+        STATUS.battery_power_w = power_w
         STATUS.battery_status = status or "UNKNOWN"
         STATUS.battery_present = present
         STATUS.battery_last_update_at = time.time()

@@ -26,6 +26,8 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
             rtcm_recent_types = STATUS.rtcm_recent_types
             battery_percent = STATUS.battery_percent
             battery_voltage_v = STATUS.battery_voltage_v
+            battery_current_a = STATUS.battery_current_a
+            battery_power_w = STATUS.battery_power_w
             battery_status = STATUS.battery_status
             battery_present = STATUS.battery_present
             battery_last_update_at = STATUS.battery_last_update_at
@@ -69,6 +71,8 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
         print(f"Last NMEA Age   : {nmea_age}", flush=True)
         print(f"Battery Level   : {fmt_percent(battery_percent)}", flush=True)
         print(f"Battery Voltage : {fmt(battery_voltage_v, 3)} V", flush=True)
+        print(f"Battery Current : {fmt(battery_current_a, 3)} A", flush=True)
+        print(f"Battery Power   : {fmt(battery_power_w, 3)} W", flush=True)
         print(f"Battery Status  : {battery_status}", flush=True)
         print(f"Battery Present : {battery_present_text}", flush=True)
         print(f"Battery Age     : {battery_age}", flush=True)
