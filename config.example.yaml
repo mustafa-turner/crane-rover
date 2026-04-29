@@ -37,6 +37,25 @@ battery:
   # driver: sysfs
   # basePath: /sys/class/power_supply/battery
 
+peerUdp:
+  enabled: true
+  deviceId: rover-01
+  port: 5005
+  broadcastHost: 255.255.255.255
+  listenHost: ""
+  broadcastIntervalSec: 1.0
+  recvPollTimeoutSec: 0.2
+  maxPeerMessageAgeSec: 2.0
+  hdopAccuracyScale: 2.5
+  accuracyByFixLabel:
+    "UNKNOWN": null
+    "NO FIX": null
+    "GNSS FIX": 5.0
+    "DGPS": 1.5
+    "RTK FLOAT": 0.5
+    "RTK FIXED": 0.02
+    "DEAD RECKONING": 10.0
+
 blynk:
   enabled: true
   broker: blynk.cloud

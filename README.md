@@ -6,6 +6,7 @@ Minimal rover app for:
 - connecting to an NTRIP caster
 - forwarding RTCM corrections into the receiver over UART
 - reading UPS battery status from the Waveshare UPS HAT (C) over I2C
+- broadcasting rover state to peer devices over UDP and estimating inter-rover distance
 - publishing rover status to Blynk over MQTT
 
 ## Files
@@ -16,6 +17,7 @@ Minimal rover app for:
 - `rover/gnss.py` for serial access and NMEA parsing
 - `rover/ntrip.py` for NTRIP connection and RTCM forwarding
 - `rover/battery.py` for UPS battery monitoring via INA219 / sysfs fallback
+- `rover/peer_udp.py` for UDP peer broadcast / receive and distance calculation
 - `rover/blynk.py` for MQTT publishing
 - `rover/status.py` for terminal status output
 - `requirements.txt`
@@ -82,6 +84,25 @@ battery:
   maxCurrentA: 3.2
   minVoltageV: 3.0
   maxVoltageV: 4.2
+
+peerUdp:
+  enabled: true
+  deviceId: rover-01
+  port: 5005
+  broadcastHost: 255.255.255.255
+  listenHost: ""
+  broadcastIntervalSec: 1.0
+  recvPollTimeoutSec: 0.2
+  maxPeerMessageAgeSec: 2.0
+  hdopAccuracyScale: 2.5
+  accuracyByFixLabel:
+    "UNKNOWN": null
+    "NO FIX": null
+    "GNSS FIX": 5.0
+    "DGPS": 1.5
+    "RTK FLOAT": 0.5
+    "RTK FIXED": 0.02
+    "DEAD RECKONING": 10.0
 ```
 
 ## Run
@@ -105,6 +126,9 @@ python3 main.py
 - if I2C battery reads fail on Raspberry Pi, install `python3-smbus` or keep `smbus2` in the Python environment
 - the status output also shows battery level, voltage, current, power, status, and battery read age when `battery.enabled` is `true`
 - the Blynk payload includes `battery_percent`, `battery_voltage_v`, `battery_current_a`, `battery_power_w`, `battery_status`, and `battery_present`
+- peer UDP messages include device id, timestamp, lat/lon/alt, fix mode, HDOP, and estimated horizontal accuracy
+- peer distance is only treated as valid while the latest received message for that peer is newer than `peerUdp.maxPeerMessageAgeSec`
+- combined peer accuracy is calculated as root-sum-square of local and remote horizontal accuracy estimates
 - if NTRIP drops, the script will retry automatically
 - `main.py` is now only the bootstrap entrypoint; protocol logic lives under `rover/`
 

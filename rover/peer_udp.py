@@ -1,0 +1,235 @@
+from __future__ import annotations
+
+import json
+import logging
+import math
+import socket
+import time
+
+from rover.state import (
+    PeerStatus,
+    STATUS,
+    STATUS_LOCK,
+    update_local_horizontal_accuracy,
+    update_peer_runtime_state,
+    upsert_peer_status,
+)
+
+
+DEFAULT_FIX_ACCURACY_M = {
+    "UNKNOWN": None,
+    "NO FIX": None,
+    "GNSS FIX": 5.0,
+    "DGPS": 1.5,
+    "RTK FLOAT": 0.5,
+    "RTK FIXED": 0.02,
+    "DEAD RECKONING": 10.0,
+}
+
+PEER_SCHEMA = "crane-rover-peer-v1"
+EARTH_RADIUS_M = 6_371_000.0
+
+
+def get_accuracy_map(peer_cfg: dict) -> dict[str, float | None]:
+    raw_map = peer_cfg.get("accuracyByFixLabel", {})
+    merged = DEFAULT_FIX_ACCURACY_M.copy()
+    for key, value in raw_map.items():
+        merged[str(key).upper()] = None if value is None else float(value)
+    return merged
+
+
+def estimate_accuracy_m(
+    *,
+    fix_label: str,
+    hdop: float | None,
+    accuracy_map: dict[str, float | None],
+    hdop_scale: float | None,
+) -> float | None:
+    fix_key = (fix_label or "UNKNOWN").upper()
+    base_accuracy = accuracy_map.get(fix_key)
+    if base_accuracy is None:
+        return None
+    if hdop is None or hdop_scale is None:
+        return base_accuracy
+    return max(base_accuracy, hdop * hdop_scale)
+
+
+def combined_accuracy_m(local_accuracy_m: float | None, peer_accuracy_m: float | None) -> float | None:
+    if local_accuracy_m is None or peer_accuracy_m is None:
+        return None
+    return math.sqrt((local_accuracy_m ** 2) + (peer_accuracy_m ** 2))
+
+
+def haversine_distance_m(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+) -> float:
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    a = math.sin(dlat / 2.0) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2.0) ** 2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return EARTH_RADIUS_M * c
+
+
+def snapshot_local_state() -> dict:
+    with STATUS_LOCK:
+        return {
+            "latitude": STATUS.latitude,
+            "longitude": STATUS.longitude,
+            "altitude_m": STATUS.altitude_m,
+            "fix_label": STATUS.fix_label,
+            "fix_quality": STATUS.fix_quality,
+            "hdop": STATUS.hdop,
+        }
+
+
+def build_peer_payload(device_id: str, peer_cfg: dict) -> dict:
+    local = snapshot_local_state()
+    accuracy_map = get_accuracy_map(peer_cfg)
+    hdop_scale = peer_cfg.get("hdopAccuracyScale")
+    if hdop_scale is not None:
+        hdop_scale = float(hdop_scale)
+
+    accuracy_m = estimate_accuracy_m(
+        fix_label=local["fix_label"],
+        hdop=local["hdop"],
+        accuracy_map=accuracy_map,
+        hdop_scale=hdop_scale,
+    )
+    update_local_horizontal_accuracy(accuracy_m)
+
+    return {
+        "schema": PEER_SCHEMA,
+        "device_id": device_id,
+        "sent_at": time.time(),
+        "latitude": local["latitude"],
+        "longitude": local["longitude"],
+        "altitude_m": local["altitude_m"],
+        "fix_label": local["fix_label"],
+        "fix_quality": local["fix_quality"],
+        "hdop": local["hdop"],
+        "accuracy_m": accuracy_m,
+    }
+
+
+def parse_peer_message(data: bytes) -> dict:
+    payload = json.loads(data.decode("utf-8"))
+    if payload.get("schema") != PEER_SCHEMA:
+        raise ValueError("Unsupported peer schema")
+    if "device_id" not in payload:
+        raise ValueError("Missing device_id")
+    return payload
+
+
+def build_peer_status_from_message(
+    payload: dict,
+    source_host: str,
+    peer_cfg: dict,
+) -> PeerStatus:
+    now = time.time()
+    local = snapshot_local_state()
+    accuracy_map = get_accuracy_map(peer_cfg)
+    hdop_scale = peer_cfg.get("hdopAccuracyScale")
+    if hdop_scale is not None:
+        hdop_scale = float(hdop_scale)
+
+    local_accuracy_m = estimate_accuracy_m(
+        fix_label=local["fix_label"],
+        hdop=local["hdop"],
+        accuracy_map=accuracy_map,
+        hdop_scale=hdop_scale,
+    )
+    update_local_horizontal_accuracy(local_accuracy_m)
+
+    peer_fix_label = str(payload.get("fix_label", "UNKNOWN"))
+    peer_accuracy_m = payload.get("accuracy_m")
+    if peer_accuracy_m is None:
+        peer_accuracy_m = estimate_accuracy_m(
+            fix_label=peer_fix_label,
+            hdop=payload.get("hdop"),
+            accuracy_map=accuracy_map,
+            hdop_scale=hdop_scale,
+        )
+    else:
+        peer_accuracy_m = float(peer_accuracy_m)
+
+    distance_m = None
+    if None not in (local["latitude"], local["longitude"], payload.get("latitude"), payload.get("longitude")):
+        distance_m = haversine_distance_m(
+            float(local["latitude"]),
+            float(local["longitude"]),
+            float(payload["latitude"]),
+            float(payload["longitude"]),
+        )
+
+    return PeerStatus(
+        device_id=str(payload["device_id"]),
+        latitude=payload.get("latitude"),
+        longitude=payload.get("longitude"),
+        altitude_m=payload.get("altitude_m"),
+        fix_label=peer_fix_label,
+        fix_quality=payload.get("fix_quality"),
+        hdop=payload.get("hdop"),
+        accuracy_m=peer_accuracy_m,
+        sent_at=float(payload.get("sent_at", now)),
+        received_at=now,
+        distance_m=distance_m,
+        combined_accuracy_m=combined_accuracy_m(local_accuracy_m, peer_accuracy_m),
+        source_host=source_host,
+        max_message_age_sec=float(peer_cfg.get("maxPeerMessageAgeSec", 2.0)),
+    )
+
+
+def peer_udp_loop(peer_cfg: dict, stop_event) -> None:
+    device_id = str(peer_cfg.get("deviceId") or socket.gethostname())
+    bind_host = str(peer_cfg.get("listenHost", ""))
+    broadcast_host = str(peer_cfg.get("broadcastHost", "255.255.255.255"))
+    port = int(peer_cfg.get("port", 5005))
+    recv_poll_timeout = float(peer_cfg.get("recvPollTimeoutSec", 0.2))
+    broadcast_interval = float(peer_cfg.get("broadcastIntervalSec", 1.0))
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.bind((bind_host, port))
+    sock.settimeout(recv_poll_timeout)
+
+    logging.info("Peer UDP started device_id=%s bind=%s:%s broadcast=%s", device_id, bind_host or "*", port, broadcast_host)
+
+    next_broadcast_at = 0.0
+    try:
+        while not stop_event.is_set():
+            now = time.time()
+            if now >= next_broadcast_at:
+                payload = build_peer_payload(device_id, peer_cfg)
+                sock.sendto(json.dumps(payload).encode("utf-8"), (broadcast_host, port))
+                update_peer_runtime_state(last_broadcast_at=payload["sent_at"], error=None)
+                next_broadcast_at = now + broadcast_interval
+
+            try:
+                data, addr = sock.recvfrom(4096)
+            except socket.timeout:
+                continue
+
+            try:
+                payload = parse_peer_message(data)
+                if str(payload["device_id"]) == device_id:
+                    continue
+                peer_status = build_peer_status_from_message(payload, addr[0], peer_cfg)
+                upsert_peer_status(peer_status)
+                update_peer_runtime_state(last_receive_at=peer_status.received_at, error=None)
+            except Exception as exc:
+                logging.debug("Peer UDP message ignored from %s: %s", addr[0], exc)
+    except Exception as exc:
+        update_peer_runtime_state(error=str(exc))
+        logging.error("Peer UDP error: %s", exc)
+    finally:
+        sock.close()
+        logging.info("Peer UDP stopped")

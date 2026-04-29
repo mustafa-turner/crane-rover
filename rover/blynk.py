@@ -26,11 +26,27 @@ def get_blynk_payload() -> dict:
         battery_power_w = STATUS.battery_power_w
         battery_status = STATUS.battery_status
         battery_present = STATUS.battery_present
+        local_horizontal_accuracy_m = STATUS.local_horizontal_accuracy_m
+        peers = list(STATUS.peers.values())
 
     now = time.time()
     rtcm_age_sec = 999.0
     if last_rtcm_received_at is not None:
         rtcm_age_sec = max(0.0, now - last_rtcm_received_at)
+
+    fresh_peers = []
+    for peer in peers:
+        if peer.received_at is None:
+            continue
+        peer_age_sec = now - peer.received_at
+        if peer.max_message_age_sec > 0 and peer_age_sec > peer.max_message_age_sec:
+            continue
+        fresh_peers.append(peer)
+
+    nearest_peer = None
+    peers_with_distance = [peer for peer in fresh_peers if peer.distance_m is not None]
+    if peers_with_distance:
+        nearest_peer = min(peers_with_distance, key=lambda peer: peer.distance_m)
 
     payload = {
         "latitude": lat if lat is not None else 0.0,
@@ -47,6 +63,15 @@ def get_blynk_payload() -> dict:
         "battery_power_w": round(battery_power_w, 3) if battery_power_w is not None else 0.0,
         "battery_status": battery_status,
         "battery_present": 1 if battery_present is True else 0 if battery_present is False else -1,
+        "local_accuracy_m": round(local_horizontal_accuracy_m, 3) if local_horizontal_accuracy_m is not None else -1.0,
+        "peer_count": len(peers),
+        "fresh_peer_count": len(fresh_peers),
+        "nearest_peer_distance_m": round(nearest_peer.distance_m, 3) if nearest_peer and nearest_peer.distance_m is not None else -1.0,
+        "nearest_peer_combined_accuracy_m": (
+            round(nearest_peer.combined_accuracy_m, 3)
+            if nearest_peer and nearest_peer.combined_accuracy_m is not None
+            else -1.0
+        ),
     }
     if lat is not None and lon is not None:
         payload["position"] = [lon, lat]

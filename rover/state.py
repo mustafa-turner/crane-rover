@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import Counter, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -58,6 +58,24 @@ RTCM_MESSAGE_NAMES = {
 
 
 @dataclass
+class PeerStatus:
+    device_id: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    altitude_m: Optional[float] = None
+    fix_label: str = "UNKNOWN"
+    fix_quality: Optional[int] = None
+    hdop: Optional[float] = None
+    accuracy_m: Optional[float] = None
+    sent_at: Optional[float] = None
+    received_at: Optional[float] = None
+    distance_m: Optional[float] = None
+    combined_accuracy_m: Optional[float] = None
+    source_host: str = ""
+    max_message_age_sec: float = 0.0
+
+
+@dataclass
 class RoverStatus:
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -84,6 +102,11 @@ class RoverStatus:
     battery_present: Optional[bool] = None
     battery_last_update_at: Optional[float] = None
     battery_last_error: Optional[str] = None
+    local_horizontal_accuracy_m: Optional[float] = None
+    peer_last_broadcast_at: Optional[float] = None
+    peer_last_receive_at: Optional[float] = None
+    peer_last_error: Optional[str] = None
+    peers: dict[str, PeerStatus] = field(default_factory=dict)
 
 
 STATUS_LOCK = threading.Lock()
@@ -268,3 +291,31 @@ def update_status_from_battery(
         STATUS.battery_present = present
         STATUS.battery_last_update_at = time.time()
         STATUS.battery_last_error = error
+
+
+def update_local_horizontal_accuracy(accuracy_m: Optional[float]) -> None:
+    with STATUS_LOCK:
+        STATUS.local_horizontal_accuracy_m = accuracy_m
+
+
+def update_peer_runtime_state(
+    *,
+    last_broadcast_at: Optional[float] = None,
+    last_receive_at: Optional[float] = None,
+    error: Optional[str] = None,
+) -> None:
+    with STATUS_LOCK:
+        if last_broadcast_at is not None:
+            STATUS.peer_last_broadcast_at = last_broadcast_at
+        if last_receive_at is not None:
+            STATUS.peer_last_receive_at = last_receive_at
+        STATUS.peer_last_error = error
+
+
+def upsert_peer_status(peer: PeerStatus) -> None:
+    with STATUS_LOCK:
+        existing = STATUS.peers.get(peer.device_id)
+        if existing is not None and existing.sent_at is not None and peer.sent_at is not None:
+            if peer.sent_at < existing.sent_at:
+                return
+        STATUS.peers[peer.device_id] = peer

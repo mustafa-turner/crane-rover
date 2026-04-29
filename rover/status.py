@@ -32,6 +32,11 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
             battery_present = STATUS.battery_present
             battery_last_update_at = STATUS.battery_last_update_at
             battery_last_error = STATUS.battery_last_error
+            local_horizontal_accuracy_m = STATUS.local_horizontal_accuracy_m
+            peer_last_broadcast_at = STATUS.peer_last_broadcast_at
+            peer_last_receive_at = STATUS.peer_last_receive_at
+            peer_last_error = STATUS.peer_last_error
+            peers = list(STATUS.peers.values())
 
         now = time.time()
         rtcm_age = "-"
@@ -45,6 +50,14 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
         battery_age = "-"
         if battery_last_update_at is not None:
             battery_age = f"{now - battery_last_update_at:.1f}s"
+
+        peer_broadcast_age = "-"
+        if peer_last_broadcast_at is not None:
+            peer_broadcast_age = f"{now - peer_last_broadcast_at:.1f}s"
+
+        peer_receive_age = "-"
+        if peer_last_receive_at is not None:
+            peer_receive_age = f"{now - peer_last_receive_at:.1f}s"
 
         ntrip_text = "CONNECTED" if ntrip_connected else "DISCONNECTED"
         battery_present_text = "-"
@@ -60,6 +73,7 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
         print(f"Satellites      : {fmt_int(sats)}", flush=True)
         print(f"HDOP            : {fmt(hdop, 2)}", flush=True)
         print(f"Fix / RTK Mode  : {fix_label}", flush=True)
+        print(f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}", flush=True)
         print(f"NTRIP Status    : {ntrip_text}", flush=True)
         print(f"Last RTCM Age   : {rtcm_age}", flush=True)
         print(f"RTCM Bytes      : {rtcm_bytes}", flush=True)
@@ -76,10 +90,33 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
         print(f"Battery Status  : {battery_status}", flush=True)
         print(f"Battery Present : {battery_present_text}", flush=True)
         print(f"Battery Age     : {battery_age}", flush=True)
+        print(f"Peer Tx Age     : {peer_broadcast_age}", flush=True)
+        print(f"Peer Rx Age     : {peer_receive_age}", flush=True)
+        print(f"Peer Count      : {len(peers)}", flush=True)
         if ntrip_last_error:
             print(f"NTRIP Error     : {ntrip_last_error}", flush=True)
         if battery_last_error:
             print(f"Battery Error   : {battery_last_error}", flush=True)
+        if peer_last_error:
+            print(f"Peer UDP Error  : {peer_last_error}", flush=True)
+        if peers:
+            print("--- PEERS ---", flush=True)
+            for peer in sorted(peers, key=lambda item: item.device_id):
+                peer_age_sec = None if peer.received_at is None else (now - peer.received_at)
+                is_stale = (
+                    peer_age_sec is None
+                    or (peer.max_message_age_sec > 0 and peer_age_sec > peer.max_message_age_sec)
+                )
+                distance_text = fmt(peer.distance_m, 3) if not is_stale else "-"
+                combined_accuracy_text = fmt(peer.combined_accuracy_m, 3) if not is_stale else "-"
+                peer_age_text = "-" if peer_age_sec is None else f"{peer_age_sec:.1f}s"
+                freshness = "STALE" if is_stale else "FRESH"
+                print(
+                    f"{peer.device_id:<15} dist={distance_text} m age={peer_age_text} "
+                    f"fix={peer.fix_label} acc={fmt(peer.accuracy_m, 3)} m "
+                    f"combined={combined_accuracy_text} m {freshness}",
+                    flush=True,
+                )
         print("====================\n", flush=True)
 
         stop_event.wait(interval_sec)

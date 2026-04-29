@@ -8,6 +8,7 @@ from rover.blynk import blynk_loop
 from rover.config import load_config, setup_logging
 from rover.gnss import nmea_reader_loop, open_serial
 from rover.ntrip import ntrip_loop
+from rover.peer_udp import peer_udp_loop
 from rover.status import status_printer_loop
 
 
@@ -21,6 +22,7 @@ def main() -> int:
     status_cfg = config.get("status", {})
     blynk_cfg = config.get("blynk", {})
     battery_cfg = config.get("battery", {})
+    peer_cfg = config.get("peerUdp", {})
 
     ser = open_serial(serial_cfg)
     stop_event = threading.Event()
@@ -47,6 +49,13 @@ def main() -> int:
             args=(battery_cfg, stop_event),
             daemon=True,
         )
+    peer_thread = None
+    if peer_cfg.get("enabled", False):
+        peer_thread = threading.Thread(
+            target=peer_udp_loop,
+            args=(peer_cfg, stop_event),
+            daemon=True,
+        )
 
     blynk_thread = None
     if blynk_cfg.get("enabled", False):
@@ -61,6 +70,8 @@ def main() -> int:
     printer_thread.start()
     if battery_thread is not None:
         battery_thread.start()
+    if peer_thread is not None:
+        peer_thread.start()
     if blynk_thread is not None:
         blynk_thread.start()
 
@@ -78,6 +89,8 @@ def main() -> int:
         printer_thread.join(timeout=2)
         if battery_thread is not None:
             battery_thread.join(timeout=2)
+        if peer_thread is not None:
+            peer_thread.join(timeout=2)
         if blynk_thread is not None:
             blynk_thread.join(timeout=2)
         ser.close()
