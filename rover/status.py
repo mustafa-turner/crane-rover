@@ -16,8 +16,11 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
             fix_label = STATUS.fix_label
             ntrip_connected = STATUS.ntrip_connected
             ntrip_last_error = STATUS.ntrip_last_error
+            ntrip_last_response = STATUS.ntrip_last_response
             last_rtcm_received_at = STATUS.last_rtcm_received_at
             last_nmea_at = STATUS.last_nmea_at
+            last_gga_at = STATUS.last_gga_at
+            last_gga_sent_at = STATUS.last_gga_sent_at
             rtcm_bytes = STATUS.rtcm_bytes
             rtcm_frames = STATUS.rtcm_frames
             rtcm_last_type = STATUS.rtcm_last_type
@@ -47,6 +50,14 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
         if last_nmea_at is not None:
             nmea_age = f"{now - last_nmea_at:.1f}s"
 
+        gga_age = "-"
+        if last_gga_at is not None:
+            gga_age = f"{now - last_gga_at:.1f}s"
+
+        gga_sent_age = "-"
+        if last_gga_sent_at is not None:
+            gga_sent_age = f"{now - last_gga_sent_at:.1f}s"
+
         battery_age = "-"
         if battery_last_update_at is not None:
             battery_age = f"{now - battery_last_update_at:.1f}s"
@@ -75,6 +86,7 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
         print(f"Fix / RTK Mode  : {fix_label}", flush=True)
         print(f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}", flush=True)
         print(f"NTRIP Status    : {ntrip_text}", flush=True)
+        print(f"NTRIP Response  : {ntrip_last_response or '-'}", flush=True)
         print(f"Last RTCM Age   : {rtcm_age}", flush=True)
         print(f"RTCM Bytes      : {rtcm_bytes}", flush=True)
         print(f"RTCM Frames     : {rtcm_frames}", flush=True)
@@ -83,6 +95,8 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
         print(f"RTCM Has MSM    : {'YES' if rtcm_has_observation_frame else 'NO'}", flush=True)
         print(f"RTCM Recent     : {rtcm_recent_types}", flush=True)
         print(f"Last NMEA Age   : {nmea_age}", flush=True)
+        print(f"Last GGA Age    : {gga_age}", flush=True)
+        print(f"Last GGA Sent   : {gga_sent_age}", flush=True)
         print(f"Battery Level   : {fmt_percent(battery_percent)}", flush=True)
         print(f"Battery Voltage : {fmt(battery_voltage_v, 3)} V", flush=True)
         print(f"Battery Current : {fmt(battery_current_a, 3)} A", flush=True)

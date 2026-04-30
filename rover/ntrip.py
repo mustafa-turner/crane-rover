@@ -99,10 +99,12 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
 
             header = read_http_header(sock)
             validate_ntrip_response(header)
+            response_line = header.decode("latin1", errors="ignore").splitlines()[0] if header else ""
 
             with STATUS_LOCK:
                 STATUS.ntrip_connected = True
                 STATUS.ntrip_last_error = None
+                STATUS.ntrip_last_response = response_line
 
             last_rtcm_data_at = time.time()
             last_gga_sent_at = 0.0
@@ -114,6 +116,8 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                     if send_gga_to_caster(sock):
                         last_gga_sent_at = time.time()
                         has_sent_gga = True
+                        with STATUS_LOCK:
+                            STATUS.last_gga_sent_at = last_gga_sent_at
                 except Exception as exc:
                     logging.warning("Initial GGA send failed: %s", exc)
 
@@ -125,6 +129,8 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                             last_gga_sent_at = time.time()
                             has_sent_gga = True
                             waiting_for_gga_logged = False
+                            with STATUS_LOCK:
+                                STATUS.last_gga_sent_at = last_gga_sent_at
                     except Exception as exc:
                         raise ConnectionError(f"GGA send failed: {exc}") from exc
 
@@ -154,7 +160,15 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                             waiting_for_gga_logged = True
                         continue
                     if time.time() - last_rtcm_data_at >= read_timeout:
-                        raise TimeoutError(f"No RTCM data received for {read_timeout} seconds")
+                        gga_age_text = "unknown"
+                        with STATUS_LOCK:
+                            if STATUS.last_gga_at is not None:
+                                gga_age_text = f"{time.time() - STATUS.last_gga_at:.1f}s"
+                        raise TimeoutError(
+                            f"No RTCM data received for {read_timeout} seconds "
+                            f"(mountpoint={mountpoint}, gga_forward={gga_forward_enabled}, "
+                            f"gga_sent={has_sent_gga}, latest_gga_age={gga_age_text})"
+                        )
         except Exception as exc:
             with STATUS_LOCK:
                 STATUS.ntrip_connected = False

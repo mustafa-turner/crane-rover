@@ -87,8 +87,11 @@ class RoverStatus:
     fix_label: str = "UNKNOWN"
     ntrip_connected: bool = False
     ntrip_last_error: Optional[str] = None
+    ntrip_last_response: Optional[str] = None
     last_rtcm_received_at: Optional[float] = None
     last_nmea_at: Optional[float] = None
+    last_gga_at: Optional[float] = None
+    last_gga_sent_at: Optional[float] = None
     rtcm_bytes: int = 0
     rtcm_frames: int = 0
     rtcm_last_type: Optional[int] = None
@@ -233,6 +236,9 @@ def store_latest_gga(raw_data: bytes) -> None:
 
     with LATEST_GGA_LOCK:
         LATEST_GGA = line
+
+    with STATUS_LOCK:
+        STATUS.last_gga_at = time.time()
 
 
 def get_latest_gga() -> Optional[str]:
