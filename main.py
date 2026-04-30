@@ -37,11 +37,13 @@ def main() -> int:
         args=(ser, config["ntrip"], stop_event),
         daemon=True,
     )
-    printer_thread = threading.Thread(
-        target=status_printer_loop,
-        args=(int(status_cfg.get("printIntervalSec", 2)), stop_event),
-        daemon=True,
-    )
+    printer_thread = None
+    if status_cfg.get("enabled", True):
+        printer_thread = threading.Thread(
+            target=status_printer_loop,
+            args=(int(status_cfg.get("printIntervalSec", 2)), stop_event),
+            daemon=True,
+        )
     battery_thread = None
     if battery_cfg.get("enabled", False):
         battery_thread = threading.Thread(
@@ -67,7 +69,8 @@ def main() -> int:
 
     nmea_thread.start()
     ntrip_thread.start()
-    printer_thread.start()
+    if printer_thread is not None:
+        printer_thread.start()
     if battery_thread is not None:
         battery_thread.start()
     if peer_thread is not None:
@@ -86,7 +89,8 @@ def main() -> int:
         stop_event.set()
         nmea_thread.join(timeout=2)
         ntrip_thread.join(timeout=2)
-        printer_thread.join(timeout=2)
+        if printer_thread is not None:
+            printer_thread.join(timeout=2)
         if battery_thread is not None:
             battery_thread.join(timeout=2)
         if peer_thread is not None:

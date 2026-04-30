@@ -21,6 +21,7 @@ logging:
   level: INFO
 
 status:
+  enabled: true
   printIntervalSec: 2
 
 battery:

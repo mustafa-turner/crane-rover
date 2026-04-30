@@ -159,6 +159,7 @@ logging:
   level: INFO
 
 status:
+  enabled: true
   printIntervalSec: 2
 
 battery:
@@ -249,6 +250,8 @@ blynk:
 
 ### `status`
 
+- `enabled`
+  Whether the terminal status printer thread runs.
 - `printIntervalSec`
   How often the status screen is printed to the terminal.
 
