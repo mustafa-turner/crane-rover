@@ -346,6 +346,68 @@ python3 main.py
 
 Stop with `Ctrl+C`.
 
+## Run As A Service
+
+If you want the rover to start automatically after the Pi boots, use `systemd`.
+
+This repo includes a service file at [systemd/crane-rover.service](/Users/mustafa/Documents/GitHub/crane-rover/systemd/crane-rover.service).
+
+Important assumptions in that unit:
+
+- the project lives at `/home/pi/crane-rover`
+- the Python virtual environment is `/home/pi/crane-rover/.venv`
+- the service runs as user `pi`
+- the config file is `/home/pi/crane-rover/config.yaml`
+
+If your paths or username are different, edit the service file before installing it.
+
+### Install the service
+
+From the repo root on the Pi:
+
+```bash
+sudo cp systemd/crane-rover.service /etc/systemd/system/crane-rover.service
+sudo systemctl daemon-reload
+sudo systemctl enable crane-rover.service
+sudo systemctl start crane-rover.service
+```
+
+### Check service status
+
+```bash
+sudo systemctl status crane-rover.service
+```
+
+### View logs
+
+```bash
+journalctl -u crane-rover.service -f
+```
+
+### Restart after config or code changes
+
+```bash
+sudo systemctl restart crane-rover.service
+```
+
+### Stop or disable the service
+
+```bash
+sudo systemctl stop crane-rover.service
+sudo systemctl disable crane-rover.service
+```
+
+### Why this works after power loss
+
+The service unit uses:
+
+- `WantedBy=multi-user.target`
+  So it starts during normal boot.
+- `Restart=always`
+  So `systemd` restarts it if the process exits or crashes.
+- `RestartSec=5`
+  Adds a short delay before restart attempts.
+
 ## Terminal Status Output
 
 The status screen shows:

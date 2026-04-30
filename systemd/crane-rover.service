@@ -1,0 +1,17 @@
+[Unit]
+Description=Crane Rover Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/crane-rover
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/crane-rover/.venv/bin/python3 /home/pi/crane-rover/main.py /home/pi/crane-rover/config.yaml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
