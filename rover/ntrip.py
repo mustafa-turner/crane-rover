@@ -73,7 +73,7 @@ def send_gga_to_caster(sock: socket.socket) -> bool:
 def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
     host = ntrip_cfg["host"]
     port = int(ntrip_cfg.get("port", 2101))
-    mountpoint = ntrip_cfg["mountpoint"]
+    mountpoint = str(ntrip_cfg["mountpoint"]).lstrip("/")
     username = ntrip_cfg["username"]
     password = ntrip_cfg["password"]
     connect_timeout = int(ntrip_cfg.get("connectTimeoutSec", 10))
@@ -106,11 +106,14 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
 
             last_rtcm_data_at = time.time()
             last_gga_sent_at = 0.0
+            has_sent_gga = False
+            waiting_for_gga_logged = False
 
             if gga_forward_enabled:
                 try:
                     if send_gga_to_caster(sock):
                         last_gga_sent_at = time.time()
+                        has_sent_gga = True
                 except Exception as exc:
                     logging.warning("Initial GGA send failed: %s", exc)
 
@@ -120,6 +123,8 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                     try:
                         if send_gga_to_caster(sock):
                             last_gga_sent_at = time.time()
+                            has_sent_gga = True
+                            waiting_for_gga_logged = False
                     except Exception as exc:
                         raise ConnectionError(f"GGA send failed: {exc}") from exc
 
@@ -143,6 +148,11 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                         logging.info("Recent RTCM types: %s", inspector.describe_recent())
                         last_rtcm_log_at = now
                 except socket.timeout:
+                    if gga_forward_enabled and not has_sent_gga:
+                        if not waiting_for_gga_logged:
+                            logging.info("Connected to NTRIP caster and waiting for first GGA before enforcing RTCM timeout")
+                            waiting_for_gga_logged = True
+                        continue
                     if time.time() - last_rtcm_data_at >= read_timeout:
                         raise TimeoutError(f"No RTCM data received for {read_timeout} seconds")
         except Exception as exc:

@@ -225,6 +225,12 @@ def store_latest_gga(raw_data: bytes) -> None:
     if not line.startswith("$"):
         return
 
+    # Only cache actual GGA sentences for NTRIP uplink use.
+    body = line[1:]
+    sentence_type = body.split(",", 1)[0].upper()
+    if not sentence_type.endswith("GGA"):
+        return
+
     with LATEST_GGA_LOCK:
         LATEST_GGA = line
 
