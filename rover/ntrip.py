@@ -94,11 +94,15 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
         try:
             logging.info("Connecting to NTRIP caster %s:%s mountpoint=%s", host, port, mountpoint)
             sock = socket.create_connection((host, port), timeout=connect_timeout)
+            logging.info("TCP connected to NTRIP caster %s:%s", host, port)
             sock.sendall(build_ntrip_request(host, port, mountpoint, username, password))
+            logging.info("Sent NTRIP request for mountpoint=%s", mountpoint)
 
             # Keep a longer timeout during the initial NTRIP handshake.
             sock.settimeout(connect_timeout)
+            logging.info("Waiting for NTRIP response header")
             header = read_http_header(sock)
+            logging.info("Received NTRIP response header (%d bytes)", len(header))
             validate_ntrip_response(header)
             response_line = header.decode("latin1", errors="ignore").splitlines()[0] if header else ""
             sock.settimeout(recv_poll_timeout)
