@@ -36,17 +36,37 @@ def build_ntrip_request(
     return request.encode("utf-8")
 
 
-def read_http_header(sock: socket.socket) -> bytes:
-    header = b""
-    while b"\r\n\r\n" not in header:
-        chunk = sock.recv(1)
+def read_ntrip_handshake(sock: socket.socket) -> tuple[bytes, bytes]:
+    buffer = bytearray()
+
+    while True:
+        chunk = sock.recv(1024)
         if not chunk:
             break
-        header += chunk
-    return header
+        buffer.extend(chunk)
+
+        header_end = buffer.find(b"\r\n\r\n")
+        if header_end >= 0:
+            body_start = header_end + 4
+            return bytes(buffer[:body_start]), bytes(buffer[body_start:])
+
+        header_end = buffer.find(b"\n\n")
+        if header_end >= 0:
+            body_start = header_end + 2
+            return bytes(buffer[:body_start]), bytes(buffer[body_start:])
+
+        if buffer and buffer[0] == 0xD3:
+            logging.info("NTRIP caster started RTCM stream without a standard response header")
+            return b"", bytes(buffer)
+
+    return bytes(buffer), b""
 
 
 def validate_ntrip_response(header: bytes) -> None:
+    if not header:
+        logging.info("NTRIP stream accepted without response header")
+        return
+
     header_text = header.decode("latin1", errors="ignore")
     logging.debug("NTRIP response header:\n%s", header_text)
     first_line = header_text.splitlines()[0] if header_text.splitlines() else ""
@@ -101,8 +121,12 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
             # Keep a longer timeout during the initial NTRIP handshake.
             sock.settimeout(connect_timeout)
             logging.info("Waiting for NTRIP response header")
-            header = read_http_header(sock)
-            logging.info("Received NTRIP response header (%d bytes)", len(header))
+            header, initial_data = read_ntrip_handshake(sock)
+            logging.info(
+                "Received NTRIP handshake header=%d bytes initial_data=%d bytes",
+                len(header),
+                len(initial_data),
+            )
             validate_ntrip_response(header)
             response_line = header.decode("latin1", errors="ignore").splitlines()[0] if header else ""
             sock.settimeout(recv_poll_timeout)
@@ -126,6 +150,20 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                             STATUS.last_gga_sent_at = last_gga_sent_at
                 except Exception as exc:
                     logging.warning("Initial GGA send failed: %s", exc)
+
+            if initial_data:
+                logging.debug("Processing %d initial RTCM bytes from handshake", len(initial_data))
+                ser.write(initial_data)
+                ser.flush()
+                rtcm_types = inspector.feed(initial_data)
+                now = time.time()
+                last_rtcm_data_at = now
+                with STATUS_LOCK:
+                    STATUS.last_rtcm_received_at = now
+                update_status_from_rtcm(rtcm_types, len(initial_data), inspector)
+                if rtcm_types and (now - last_rtcm_log_at >= rtcm_log_interval):
+                    logging.info("Recent RTCM types: %s", inspector.describe_recent())
+                    last_rtcm_log_at = now
 
             while not stop_event.is_set():
                 now = time.time()
