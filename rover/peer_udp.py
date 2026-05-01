@@ -41,17 +41,10 @@ def get_accuracy_map(peer_cfg: dict) -> dict[str, float | None]:
 def estimate_accuracy_m(
     *,
     fix_label: str,
-    hdop: float | None,
     accuracy_map: dict[str, float | None],
-    hdop_scale: float | None,
 ) -> float | None:
     fix_key = (fix_label or "UNKNOWN").upper()
-    base_accuracy = accuracy_map.get(fix_key)
-    if base_accuracy is None:
-        return None
-    if hdop is None or hdop_scale is None:
-        return base_accuracy
-    return max(base_accuracy, hdop * hdop_scale)
+    return accuracy_map.get(fix_key)
 
 
 def combined_accuracy_m(local_accuracy_m: float | None, peer_accuracy_m: float | None) -> float | None:
@@ -101,15 +94,10 @@ def snapshot_local_state() -> dict:
 def build_peer_payload(device_id: str, peer_cfg: dict) -> dict:
     local = snapshot_local_state()
     accuracy_map = get_accuracy_map(peer_cfg)
-    hdop_scale = peer_cfg.get("hdopAccuracyScale")
-    if hdop_scale is not None:
-        hdop_scale = float(hdop_scale)
 
     accuracy_m = estimate_accuracy_m(
         fix_label=local["fix_label"],
-        hdop=local["hdop"],
         accuracy_map=accuracy_map,
-        hdop_scale=hdop_scale,
     )
     update_local_horizontal_accuracy(accuracy_m)
 
@@ -144,15 +132,10 @@ def build_peer_status_from_message(
     now = time.time()
     local = snapshot_local_state()
     accuracy_map = get_accuracy_map(peer_cfg)
-    hdop_scale = peer_cfg.get("hdopAccuracyScale")
-    if hdop_scale is not None:
-        hdop_scale = float(hdop_scale)
 
     local_accuracy_m = estimate_accuracy_m(
         fix_label=local["fix_label"],
-        hdop=local["hdop"],
         accuracy_map=accuracy_map,
-        hdop_scale=hdop_scale,
     )
     update_local_horizontal_accuracy(local_accuracy_m)
 
@@ -161,9 +144,7 @@ def build_peer_status_from_message(
     if peer_accuracy_m is None:
         peer_accuracy_m = estimate_accuracy_m(
             fix_label=peer_fix_label,
-            hdop=payload.get("hdop"),
             accuracy_map=accuracy_map,
-            hdop_scale=hdop_scale,
         )
     else:
         peer_accuracy_m = float(peer_accuracy_m)

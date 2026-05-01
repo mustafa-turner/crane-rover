@@ -47,7 +47,6 @@ peerUdp:
   broadcastIntervalSec: 1.0
   recvPollTimeoutSec: 0.2
   maxPeerMessageAgeSec: 2.0
-  hdopAccuracyScale: 2.5
   accuracyByFixLabel:
     "UNKNOWN": null
     "NO FIX": null

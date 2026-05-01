@@ -182,7 +182,6 @@ peerUdp:
   broadcastIntervalSec: 1.0
   recvPollTimeoutSec: 0.2
   maxPeerMessageAgeSec: 2.0
-  hdopAccuracyScale: 2.5
   accuracyByFixLabel:
     "UNKNOWN": null
     "NO FIX": null
@@ -305,8 +304,6 @@ This controls peer-to-peer rover awareness.
   UDP receive polling timeout.
 - `maxPeerMessageAgeSec`
   Safety timeout. If a peer message is older than this, distance is treated as stale and ignored.
-- `hdopAccuracyScale`
-  Optional HDOP multiplier used to enlarge estimated accuracy.
 - `accuracyByFixLabel`
   Base horizontal accuracy estimates per fix mode.
 
@@ -448,7 +445,7 @@ Altitude is broadcast for reference, but it is not used in the distance calculat
 
 ### Accuracy
 
-Each rover gets an estimated horizontal accuracy from its fix mode, optionally enlarged by HDOP:
+Each rover gets an estimated horizontal accuracy from its fix mode:
 
 - `NO FIX` -> no usable accuracy
 - `GNSS FIX` -> default `5.0 m`
