@@ -32,6 +32,69 @@ CONSOLE_PORT = "/dev/ttyGS0"
 CONSOLE_BAUDRATE = 115200
 CONSOLE_READ_TIMEOUT_SEC = 0.2
 
+SECTION_HELP = {
+    "serial": "GNSS receiver serial port settings.",
+    "wifi": "Preferred Wi-Fi networks, checked in priority order for startup and failover.",
+    "ntrip": "NTRIP caster connection settings for RTCM corrections.",
+    "logging": "Application logging verbosity.",
+    "status": "Operator status screen controls.",
+    "battery": "Battery monitoring configuration.",
+    "peerUdp": "Peer rover UDP sharing and optional ZeroTier unicast targets.",
+    "blynk": "Blynk MQTT publishing settings.",
+}
+
+FIELD_HELP = {
+    "serial.port": "Serial device path used for the GNSS receiver, for example /dev/serial0.",
+    "serial.baudrate": "Baud rate for the GNSS receiver serial link, for example 115200.",
+    "wifi.enabled": "Enable Wi-Fi startup selection and automatic failover between configured SSIDs.",
+    "wifi.interface": "Linux Wi-Fi interface name, usually wlan0.",
+    "wifi.network1Ssid": "Highest-priority Wi-Fi SSID.",
+    "wifi.network1Password": "Password for network1Ssid.",
+    "wifi.network2Ssid": "Second-priority Wi-Fi SSID.",
+    "wifi.network2Password": "Password for network2Ssid.",
+    "wifi.network3Ssid": "Third-priority Wi-Fi SSID.",
+    "wifi.network3Password": "Password for network3Ssid.",
+    "wifi.network4Ssid": "Fourth-priority Wi-Fi SSID.",
+    "wifi.network4Password": "Password for network4Ssid.",
+    "ntrip.host": "NTRIP caster hostname or IP address.",
+    "ntrip.port": "NTRIP caster TCP port, usually 2101.",
+    "ntrip.mountpoint": "NTRIP mountpoint name.",
+    "ntrip.username": "NTRIP username.",
+    "ntrip.password": "NTRIP password.",
+    "logging.level": "Logging verbosity.",
+    "status.enabled": "Enable the live rover status screen.",
+    "status.mode": "Status screen detail level.",
+    "battery.enabled": "Enable battery monitoring.",
+    "battery.driver": "Battery driver to use.",
+    "battery.i2cBus": "I2C bus number for the battery monitor, usually 1.",
+    "battery.i2cAddress": "I2C address for the battery monitor, usually 0x43.",
+    "battery.minVoltageV": "Battery voltage treated as empty for percentage estimation.",
+    "battery.maxVoltageV": "Battery voltage treated as full for percentage estimation.",
+    "peerUdp.enabled": "Enable peer rover UDP send and receive.",
+    "peerUdp.deviceId": "Unique rover identifier shared with peers.",
+    "peerUdp.port": "UDP port used by all rovers.",
+    "peerUdp.broadcastHost": "IPv4 broadcast address for local-LAN peer discovery, usually 255.255.255.255.",
+    "peerUdp.extraTargets": "Optional comma-separated list of unicast peer IPs, usually ZeroTier addresses.",
+    "blynk.enabled": "Enable Blynk MQTT publishing.",
+    "blynk.broker": "Blynk broker hostname.",
+    "blynk.port": "Blynk MQTT port, usually 8883.",
+    "blynk.username": "Blynk MQTT username, usually device.",
+    "blynk.authToken": "Blynk device auth token.",
+    "blynk.templateId": "Blynk template ID.",
+    "blynk.firmwareVersion": "Firmware version string reported to Blynk.",
+}
+
+FIELD_OPTIONS = {
+    "wifi.enabled": "Options: true, false",
+    "logging.level": "Options: DEBUG, INFO, WARNING, ERROR, CRITICAL",
+    "status.enabled": "Options: true, false",
+    "status.mode": "Options: normal, debug",
+    "battery.enabled": "Options: true, false",
+    "battery.driver": "Options: waveshare-ups-hat-c, sysfs",
+    "peerUdp.enabled": "Options: true, false",
+    "blynk.enabled": "Options: true, false",
+}
+
 
 def format_value(value: Any, *, key: str = "") -> str:
     if value is None:
@@ -90,6 +153,18 @@ def ordered_items(node: dict[str, Any]) -> list[tuple[str, Any]]:
         if key not in seen:
             items.append((key, value))
     return items
+
+
+def get_section_help(path: str) -> str | None:
+    return SECTION_HELP.get(path)
+
+
+def get_field_help(path: str) -> str | None:
+    return FIELD_HELP.get(path)
+
+
+def get_field_options(path: str) -> str | None:
+    return FIELD_OPTIONS.get(path)
 
 
 @dataclass
@@ -373,6 +448,9 @@ class SerialConsoleManager:
     def _edit_mapping(self, target: _OutputTarget, title: str, node: dict[str, Any]) -> None:
         while True:
             self._write(target, f"\n=== {title} ===\n")
+            section_help = get_section_help(title)
+            if section_help:
+                self._write(target, f"{section_help}\n")
             items = ordered_items(node)
             for idx, (key, value) in enumerate(items, start=1):
                 label = "section" if isinstance(value, dict) else format_value(value, key=key)
@@ -391,33 +469,43 @@ class SerialConsoleManager:
                 continue
 
             key, value = items[index]
+            field_path = f"{title}.{key}"
             if isinstance(value, dict):
-                self._edit_mapping(target, f"{title}.{key}", value)
+                self._edit_mapping(target, field_path, value)
             elif isinstance(value, list):
-                node[key] = self._prompt_for_list(target, key, value)
+                node[key] = self._prompt_for_list(target, field_path, value)
             else:
-                node[key] = self._prompt_for_scalar(target, key, value)
+                node[key] = self._prompt_for_scalar(target, field_path, value)
 
-    def _prompt_for_scalar(self, target: _OutputTarget, key: str, current: Any) -> Any:
-        self._write(target, f"Current value for {key}: {format_value(current, key=key)}\n")
+    def _prompt_for_scalar(self, target: _OutputTarget, path: str, current: Any) -> Any:
+        help_text = get_field_help(path)
+        options_text = get_field_options(path)
+        if help_text:
+            self._write(target, f"{help_text}\n")
+        if options_text:
+            self._write(target, f"{options_text}\n")
+        self._write(target, f"Current value for {path}: {format_value(current, key=path)}\n")
         self._write(target, "Press Enter to keep the current value.\n")
         while True:
             raw = target.read_line("New value: ")
             try:
                 new_value = parse_scalar(raw, current)
-                self._write(target, f"Updated {key} to {format_value(new_value, key=key)}\n")
+                self._write(target, f"Updated {path} to {format_value(new_value, key=path)}\n")
                 return new_value
             except ValueError as exc:
                 self._write(target, f"Invalid value: {exc}\n")
 
-    def _prompt_for_list(self, target: _OutputTarget, key: str, current: list[Any]) -> list[str]:
-        self._write(target, f"Current value for {key}: {format_value(current, key=key)}\n")
+    def _prompt_for_list(self, target: _OutputTarget, path: str, current: list[Any]) -> list[str]:
+        help_text = get_field_help(path)
+        if help_text:
+            self._write(target, f"{help_text}\n")
+        self._write(target, f"Current value for {path}: {format_value(current, key=path)}\n")
         self._write(target, "Enter a comma-separated list. Use [] to clear it. Press Enter to keep the current value.\n")
         while True:
             raw = target.read_line("New value: ")
             try:
                 new_value = parse_list(raw, current)
-                self._write(target, f"Updated {key} to {format_value(new_value, key=key)}\n")
+                self._write(target, f"Updated {path} to {format_value(new_value, key=path)}\n")
                 return new_value
             except ValueError as exc:
                 self._write(target, f"Invalid value: {exc}\n")
