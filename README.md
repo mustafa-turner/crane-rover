@@ -148,35 +148,7 @@ dtoverlay=dwc2
 
 Add `modules-load=dwc2` to the kernel command line in `/boot/firmware/cmdline.txt`.
 
-### 2. Install the gadget script
-
-Install [systemd/usb-gadget-serial.sh](/Users/mustafa/Documents/GitHub/crane-rover/systemd/usb-gadget-serial.sh:1):
-
-```bash
-sudo install -m 0755 systemd/usb-gadget-serial.sh /usr/local/bin/usb-gadget-serial.sh
-```
-
-Optional environment overrides:
-
-- `USB_GADGET_SERIAL_NUMBER`
-- `USB_GADGET_MANUFACTURER`
-- `USB_GADGET_PRODUCT`
-- `USB_GADGET_CONFIG_LABEL`
-- `USB_GADGET_VENDOR_ID`
-- `USB_GADGET_PRODUCT_ID`
-- `USB_GADGET_UDC`
-
-### 3. Install the `systemd` unit
-
-Install and enable [systemd/usb-gadget-serial.service](/Users/mustafa/Documents/GitHub/crane-rover/systemd/usb-gadget-serial.service:1):
-
-```bash
-sudo install -m 0644 systemd/usb-gadget-serial.service /etc/systemd/system/usb-gadget-serial.service
-sudo systemctl daemon-reload
-sudo systemctl enable usb-gadget-serial.service
-```
-
-### 4. Reboot and verify
+### 2. Reboot and verify
 
 ```bash
 sudo reboot
@@ -186,12 +158,11 @@ After reboot, verify on the Pi:
 
 ```bash
 ls -l /dev/ttyGS0
-systemctl status usb-gadget-serial.service
 ```
 
 If gadget mode initialized correctly, `/dev/ttyGS0` should exist.
 
-### 5. Connect From the Host
+### 3. Connect From the Host
 
 Connect the Raspberry Pi to the host using the correct USB device-mode port, then open the serial device exposed by the host operating system. Use `115200` baud.
 
@@ -202,6 +173,7 @@ On most hosts, the USB gadget will appear as a new serial device after enumerati
 - The rover app uses `/dev/ttyGS0` for the settings console and `serial.port` for the GNSS receiver. These must be different interfaces.
 - If the host does not detect a new serial device, the Raspberry Pi is not enumerating as a USB serial gadget.
 - If `/dev/ttyGS0` does not appear on the Pi, the hardware, selected USB port, cable, or OS configuration does not currently support gadget mode.
+- Do not force `dr_mode=host` on a Pi Zero / Zero 2 W if the board is expected to act as a USB gadget.
 
 ## Configuration
 
