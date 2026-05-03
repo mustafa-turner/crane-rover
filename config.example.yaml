@@ -20,35 +20,20 @@ ntrip:
   mountpoint: your_mountpoint
   username: your_username
   password: your_password
-  connectTimeoutSec: 10
-  readTimeoutSec: 15
-  reconnectDelaySec: 5
-  chunkSize: 1024
-  ggaForwardEnabled: true
-  ggaForwardIntervalSec: 5
-  recvPollTimeoutSec: 1.0
-  rtcmLogIntervalSec: 10
 
 logging:
   level: INFO
 
 status:
   enabled: true
-  printIntervalSec: 2
 
 battery:
   enabled: true
   driver: waveshare-ups-hat-c
-  pollIntervalSec: 10
   i2cBus: 1
   i2cAddress: 0x43
-  shuntOhms: 0.1
-  maxCurrentA: 3.2
   minVoltageV: 3.0
   maxVoltageV: 4.2
-  # If you want the old generic Linux power-supply reader instead, use:
-  # driver: sysfs
-  # basePath: /sys/class/power_supply/battery
 
 peerUdp:
   enabled: true
@@ -58,10 +43,6 @@ peerUdp:
   # Optional extra unicast targets. This is usually where you put
   # ZeroTier peer IP addresses if you want peer updates off-LAN too.
   extraTargets: []
-  listenHost: ""
-  broadcastIntervalSec: 1.0
-  recvPollTimeoutSec: 0.2
-  maxPeerMessageAgeSec: 2.0
 
 blynk:
   enabled: true
@@ -71,6 +52,3 @@ blynk:
   authToken: your_blynk_device_auth_token
   templateId: TMPLxxxxxxx
   firmwareVersion: 0.1.0
-  publishIntervalSec: 2
-  useTls: true
-  keepaliveSec: 45

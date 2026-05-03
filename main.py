@@ -12,7 +12,7 @@ from rover.gnss import nmea_reader_loop, open_serial
 from rover.ntrip import ntrip_loop
 from rover.peer_udp import peer_udp_loop
 from rover.status import status_printer_loop
-from rover.wifi import apply_preferred_wifi
+from rover.wifi import apply_preferred_wifi, wifi_monitor_loop
 
 
 def main() -> int:
@@ -79,6 +79,13 @@ def main() -> int:
             args=(blynk_cfg, stop_event),
             daemon=True,
         )
+    wifi_thread = None
+    if wifi_cfg.get("enabled", False):
+        wifi_thread = threading.Thread(
+            target=wifi_monitor_loop,
+            args=(wifi_cfg, stop_event),
+            daemon=True,
+        )
 
     nmea_thread.start()
     ntrip_thread.start()
@@ -90,6 +97,8 @@ def main() -> int:
         peer_thread.start()
     if blynk_thread is not None:
         blynk_thread.start()
+    if wifi_thread is not None:
+        wifi_thread.start()
 
     logging.info("Stage 1 rover started.")
 
@@ -116,6 +125,8 @@ def main() -> int:
             peer_thread.join(timeout=2)
         if blynk_thread is not None:
             blynk_thread.join(timeout=2)
+        if wifi_thread is not None:
+            wifi_thread.join(timeout=2)
         ser.close()
 
     if restart_requested:

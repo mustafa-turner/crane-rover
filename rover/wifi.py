@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 
 
 CONNECTION_PREFIX = "crane-rover-wifi"
 DEFAULT_INTERFACE = "wlan0"
 SLOT_COUNT = 4
+WIFI_POLL_INTERVAL_SEC = 15.0
 
 
 @dataclass
@@ -19,6 +21,25 @@ class WifiSlot:
 
 
 def apply_preferred_wifi(wifi_cfg: dict) -> None:
+    _ensure_wifi(wifi_cfg, reconnect_only=False)
+
+
+def wifi_monitor_loop(wifi_cfg: dict, stop_event) -> None:
+    if not wifi_cfg.get("enabled", False):
+        return
+
+    poll_interval = WIFI_POLL_INTERVAL_SEC
+    logging.info("Wi-Fi monitor started interface=%s poll_interval=%ss", _interface_name(wifi_cfg), poll_interval)
+    while not stop_event.is_set():
+        try:
+            _ensure_wifi(wifi_cfg, reconnect_only=True)
+        except Exception as exc:
+            logging.warning("Wi-Fi monitor error: %s", exc)
+        stop_event.wait(poll_interval)
+    logging.info("Wi-Fi monitor stopped")
+
+
+def _ensure_wifi(wifi_cfg: dict, *, reconnect_only: bool) -> None:
     if not wifi_cfg.get("enabled", False):
         return
 
@@ -26,10 +47,14 @@ def apply_preferred_wifi(wifi_cfg: dict) -> None:
         logging.warning("Wi-Fi auto-connect is enabled but nmcli is not installed")
         return
 
-    interface = str(wifi_cfg.get("interface", DEFAULT_INTERFACE)).strip() or DEFAULT_INTERFACE
+    interface = _interface_name(wifi_cfg)
     slots = _configured_slots(wifi_cfg)
     if not slots:
         logging.info("Wi-Fi auto-connect enabled but no SSIDs are configured")
+        return
+
+    current_ssid = _current_ssid(interface)
+    if reconnect_only and current_ssid:
         return
 
     visible_ssids = _scan_visible_ssids(interface)
@@ -37,7 +62,6 @@ def apply_preferred_wifi(wifi_cfg: dict) -> None:
         logging.warning("Wi-Fi scan returned no visible SSIDs on %s", interface)
         return
 
-    current_ssid = _current_ssid(interface)
     for slot in slots:
         if slot.ssid not in visible_ssids:
             continue
@@ -48,6 +72,10 @@ def apply_preferred_wifi(wifi_cfg: dict) -> None:
             return
 
     logging.warning("None of the configured Wi-Fi SSIDs are currently available on %s", interface)
+
+
+def _interface_name(wifi_cfg: dict) -> str:
+    return str(wifi_cfg.get("interface", DEFAULT_INTERFACE)).strip() or DEFAULT_INTERFACE
 
 
 def _configured_slots(wifi_cfg: dict) -> list[WifiSlot]:

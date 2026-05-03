@@ -264,30 +264,18 @@ ntrip:
   mountpoint: your_mountpoint
   username: your_username
   password: your_password
-  connectTimeoutSec: 10
-  readTimeoutSec: 15
-  reconnectDelaySec: 5
-  chunkSize: 1024
-  ggaForwardEnabled: true
-  ggaForwardIntervalSec: 5
-  recvPollTimeoutSec: 1.0
-  rtcmLogIntervalSec: 10
 
 logging:
   level: INFO
 
 status:
   enabled: true
-  printIntervalSec: 2
 
 battery:
   enabled: true
   driver: waveshare-ups-hat-c
-  pollIntervalSec: 10
   i2cBus: 1
   i2cAddress: 0x43
-  shuntOhms: 0.1
-  maxCurrentA: 3.2
   minVoltageV: 3.0
   maxVoltageV: 4.2
 
@@ -297,10 +285,6 @@ peerUdp:
   port: 5005
   broadcastHost: 255.255.255.255
   extraTargets: []
-  listenHost: ""
-  broadcastIntervalSec: 1.0
-  recvPollTimeoutSec: 0.2
-  maxPeerMessageAgeSec: 2.0
 
 blynk:
   enabled: true
@@ -310,9 +294,6 @@ blynk:
   authToken: your_blynk_device_auth_token
   templateId: TMPLxxxxxxx
   firmwareVersion: 0.1.0
-  publishIntervalSec: 2
-  useTls: true
-  keepaliveSec: 45
 ```
 
 ## Config Reference
@@ -327,7 +308,7 @@ blynk:
 ### `wifi`
 
 - `enabled`
-  Enables preferred Wi-Fi selection at startup.
+  Enables preferred Wi-Fi selection and failover monitoring.
 - `interface`
   Wi-Fi interface name, usually `wlan0`.
 - `network1Ssid` to `network4Ssid`
@@ -347,22 +328,6 @@ blynk:
   NTRIP username.
 - `password`
   NTRIP password.
-- `connectTimeoutSec`
-  TCP connection timeout.
-- `readTimeoutSec`
-  Maximum allowed time without RTCM before reconnecting.
-- `reconnectDelaySec`
-  Delay before retrying after failure.
-- `chunkSize`
-  Number of bytes read from the caster per socket read.
-- `ggaForwardEnabled`
-  Whether the rover sends its latest GGA sentence to the caster.
-- `ggaForwardIntervalSec`
-  How often GGA is resent while connected.
-- `recvPollTimeoutSec`
-  Socket polling timeout.
-- `rtcmLogIntervalSec`
-  How often recent RTCM types are logged.
 
 ### `logging`
 
@@ -373,8 +338,6 @@ blynk:
 
 - `enabled`
   Whether the terminal status printer thread runs.
-- `printIntervalSec`
-  How often the status screen is printed to the terminal.
 
 ### `battery`
 
@@ -384,27 +347,14 @@ When using a Waveshare UPS HAT (C):
   Enables battery monitoring thread.
 - `driver`
   Use `waveshare-ups-hat-c`.
-- `pollIntervalSec`
-  How often battery telemetry is refreshed.
 - `i2cBus`
   Usually `1` on Raspberry Pi.
 - `i2cAddress`
   Usually `0x43` for this HAT.
-- `shuntOhms`
-  INA219 shunt value, normally `0.1`.
-- `maxCurrentA`
-  Used to derive INA219 calibration.
 - `minVoltageV`
   Battery empty reference for percentage estimation.
 - `maxVoltageV`
   Battery full reference for percentage estimation.
-
-Fallback mode:
-
-- `driver: sysfs`
-  Uses Linux power supply files instead of INA219.
-- `basePath`
-  Path such as `/sys/class/power_supply/battery`.
 
 ### `peerUdp`
 
@@ -420,14 +370,6 @@ This controls peer-to-peer rover awareness.
   Usually `255.255.255.255`.
 - `extraTargets`
   Optional list of unicast peer IP addresses. This is typically used for ZeroTier peer addresses.
-- `listenHost`
-  Usually empty string `""` to bind all interfaces.
-- `broadcastIntervalSec`
-  How often this rover transmits its peer message.
-- `recvPollTimeoutSec`
-  UDP receive polling timeout.
-- `maxPeerMessageAgeSec`
-  Safety timeout. If a peer message is older than this, distance is treated as stale and ignored.
 
 ### `blynk`
 
@@ -445,12 +387,6 @@ This controls peer-to-peer rover awareness.
   Blynk template ID.
 - `firmwareVersion`
   Version string reported to Blynk.
-- `publishIntervalSec`
-  Publish interval in seconds.
-- `useTls`
-  Enables TLS.
-- `keepaliveSec`
-  MQTT keepalive period.
 
 ## Running the Rover
 
@@ -595,7 +531,7 @@ This means the system assumes the cranes may be closer than the raw GNSS separat
 
 ### Stale message rule
 
-If the latest peer message for a rover is older than `peerUdp.maxPeerMessageAgeSec`, the distance is no longer treated as valid.
+If the latest peer message for a rover is older than the built-in freshness threshold, the distance is no longer treated as valid.
 
 That is the safety cutoff for peer tracking.
 
@@ -693,8 +629,6 @@ from rover.battery import read_waveshare_ups_hat_c_snapshot
 cfg = {
     "i2cBus": 1,
     "i2cAddress": "0x43",
-    "shuntOhms": 0.1,
-    "maxCurrentA": 3.2,
     "minVoltageV": 3.0,
     "maxVoltageV": 4.2,
 }
@@ -730,16 +664,11 @@ Check:
 - all rovers use the same `peerUdp.port`
 - the rovers are on the same network
 - UDP broadcast is allowed on that network
-- peer messages are arriving more frequently than `maxPeerMessageAgeSec`
+- peer messages are arriving frequently enough to remain fresh
 
 ### Peer data is stale
 
-Increase one or both:
-
-- `peerUdp.broadcastIntervalSec`
-- `peerUdp.maxPeerMessageAgeSec`
-
-But be careful: raising the stale timeout too much weakens the safety rule.
+This threshold is built into the app. If you need different stale timing behavior, change it in code.
 
 ### Blynk is not updating
 
