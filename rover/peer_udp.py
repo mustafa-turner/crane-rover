@@ -30,21 +30,12 @@ PEER_SCHEMA = "crane-rover-peer-v1"
 EARTH_RADIUS_M = 6_371_000.0
 
 
-def get_accuracy_map(peer_cfg: dict) -> dict[str, float | None]:
-    raw_map = peer_cfg.get("accuracyByFixLabel", {})
-    merged = DEFAULT_FIX_ACCURACY_M.copy()
-    for key, value in raw_map.items():
-        merged[str(key).upper()] = None if value is None else float(value)
-    return merged
-
-
 def estimate_accuracy_m(
     *,
     fix_label: str,
-    accuracy_map: dict[str, float | None],
 ) -> float | None:
     fix_key = (fix_label or "UNKNOWN").upper()
-    return accuracy_map.get(fix_key)
+    return DEFAULT_FIX_ACCURACY_M.get(fix_key)
 
 
 def combined_accuracy_m(local_accuracy_m: float | None, peer_accuracy_m: float | None) -> float | None:
@@ -87,17 +78,13 @@ def snapshot_local_state() -> dict:
             "altitude_m": STATUS.altitude_m,
             "fix_label": STATUS.fix_label,
             "fix_quality": STATUS.fix_quality,
-            "hdop": STATUS.hdop,
         }
 
 
 def build_peer_payload(device_id: str, peer_cfg: dict) -> dict:
     local = snapshot_local_state()
-    accuracy_map = get_accuracy_map(peer_cfg)
-
     accuracy_m = estimate_accuracy_m(
         fix_label=local["fix_label"],
-        accuracy_map=accuracy_map,
     )
     update_local_horizontal_accuracy(accuracy_m)
 
@@ -110,7 +97,6 @@ def build_peer_payload(device_id: str, peer_cfg: dict) -> dict:
         "altitude_m": local["altitude_m"],
         "fix_label": local["fix_label"],
         "fix_quality": local["fix_quality"],
-        "hdop": local["hdop"],
         "accuracy_m": accuracy_m,
     }
 
@@ -131,11 +117,8 @@ def build_peer_status_from_message(
 ) -> PeerStatus:
     now = time.time()
     local = snapshot_local_state()
-    accuracy_map = get_accuracy_map(peer_cfg)
-
     local_accuracy_m = estimate_accuracy_m(
         fix_label=local["fix_label"],
-        accuracy_map=accuracy_map,
     )
     update_local_horizontal_accuracy(local_accuracy_m)
 
@@ -144,7 +127,6 @@ def build_peer_status_from_message(
     if peer_accuracy_m is None:
         peer_accuracy_m = estimate_accuracy_m(
             fix_label=peer_fix_label,
-            accuracy_map=accuracy_map,
         )
     else:
         peer_accuracy_m = float(peer_accuracy_m)
@@ -167,7 +149,6 @@ def build_peer_status_from_message(
         altitude_m=payload.get("altitude_m"),
         fix_label=peer_fix_label,
         fix_quality=payload.get("fix_quality"),
-        hdop=payload.get("hdop"),
         accuracy_m=peer_accuracy_m,
         sent_at=float(payload.get("sent_at", now)),
         received_at=now,

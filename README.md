@@ -269,14 +269,6 @@ peerUdp:
   broadcastIntervalSec: 1.0
   recvPollTimeoutSec: 0.2
   maxPeerMessageAgeSec: 2.0
-  accuracyByFixLabel:
-    "UNKNOWN": null
-    "NO FIX": null
-    "GNSS FIX": 5.0
-    "DGPS": 1.5
-    "RTK FLOAT": 0.5
-    "RTK FIXED": 0.02
-    "DEAD RECKONING": 10.0
 
 blynk:
   enabled: true
@@ -391,8 +383,6 @@ This controls peer-to-peer rover awareness.
   UDP receive polling timeout.
 - `maxPeerMessageAgeSec`
   Safety timeout. If a peer message is older than this, distance is treated as stale and ignored.
-- `accuracyByFixLabel`
-  Base horizontal accuracy estimates per fix mode.
 
 ### `blynk`
 
@@ -540,8 +530,6 @@ Each rover gets an estimated horizontal accuracy from its fix mode:
 - `RTK FLOAT` -> default `0.5 m`
 - `RTK FIXED` -> default `0.02 m`
 
-These values are configurable in `peerUdp.accuracyByFixLabel`.
-
 ### Uncertainty
 
 Relative uncertainty between two rovers is calculated as root-sum-square:
@@ -578,7 +566,6 @@ Each rover broadcasts a JSON message containing:
 - altitude
 - fix label
 - fix quality
-- HDOP
 - estimated local accuracy
 
 Only the latest message per peer is kept.
