@@ -146,7 +146,7 @@ Add this line to `/boot/firmware/config.txt`:
 dtoverlay=dwc2
 ```
 
-Add `modules-load=dwc2` to the kernel command line in `/boot/firmware/cmdline.txt`.
+Add `modules-load=dwc2,g_serial` to the kernel command line in `/boot/firmware/cmdline.txt`.
 
 ### 2. Reboot and verify
 
@@ -173,7 +173,7 @@ On most hosts, the USB gadget will appear as a new serial device after enumerati
 - The rover app uses `/dev/ttyGS0` for the settings console and `serial.port` for the GNSS receiver. These must be different interfaces.
 - If the host does not detect a new serial device, the Raspberry Pi is not enumerating as a USB serial gadget.
 - If `/dev/ttyGS0` does not appear on the Pi, the hardware, selected USB port, cable, or OS configuration does not currently support gadget mode.
-- Do not force `dr_mode=host` on a Pi Zero / Zero 2 W if the board is expected to act as a USB gadget.
+- Ensure the `dtoverlay=dwc2,dr_mode=peripheral` line applies to the active board section in `config.txt`.
 
 ## Configuration
 
