@@ -16,6 +16,7 @@ Each rover can:
 - compute a conservative safety distance by subtracting uncertainty from raw distance
 - publish local rover telemetry and nearest-peer safety data to Blynk
 - print a live operator status view in the terminal
+- expose a simple keyboard-driven settings menu when running on an attached terminal
 
 ## High-Level Architecture
 
@@ -37,6 +38,8 @@ Each rover can:
   Shared in-memory state used by all threads.
 - `rover/config.py`
   YAML config loading and logging setup.
+- `rover/console.py`
+  Optional terminal menu for editing `config.yaml` and restarting the process.
 
 The design is intentionally simple:
 
@@ -57,6 +60,7 @@ At runtime, the normal flow is:
 7. Receive peer state and calculate nearest-peer distance and safety margin.
 8. Print everything to the terminal.
 9. Optionally publish a compact telemetry payload to Blynk.
+10. If running on a real TTY, enter the settings menu when any key is pressed.
 
 ## Project Files
 
@@ -132,6 +136,37 @@ Then edit:
 ```bash
 nano config.yaml
 ```
+
+If you run the rover directly from a serial console or SSH terminal, the app supports live config editing:
+
+- leave it idle to watch logs and status
+- press any key to open the settings menu
+- enter section numbers such as `1` for `serial` or `2` for `ntrip`
+- drill down into fields, enter a new value, then use `s` to save and restart
+- use `q` to leave the menu without saving
+
+The editor infers the value type from the current setting:
+
+- booleans accept `true/false`, `yes/no`, `on/off`, or `1/0`
+- integers accept decimal or hex such as `67` or `0x43`
+- floating-point values accept normal decimal input
+- `null` clears a value
+- pressing Enter keeps the current value
+
+For the auto-started `systemd` service, the serial settings menu is now intentionally hardcoded in [rover/console.py](/Users/mustafa/Documents/GitHub/crane-rover/rover/console.py:1) so users cannot break access by editing `config.yaml`.
+
+The current hardcoded console settings are:
+
+- `CONSOLE_PORT = "/dev/ttyGS0"`
+- `CONSOLE_BAUDRATE = 115200`
+- `CONSOLE_READ_TIMEOUT_SEC = 0.2`
+
+Behavior:
+
+- logs and status are mirrored to that serial port while the service runs normally
+- pressing any key on that serial connection opens the numbered settings menu
+- saving from the menu rewrites `config.yaml` and restarts the rover process
+- the hardcoded console port must be different from `serial.port`, because `serial.port` is used for the GNSS receiver
 
 ### Example `config.yaml`
 

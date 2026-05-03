@@ -5,8 +5,12 @@ import time
 from rover.state import STATUS, STATUS_LOCK, fmt, fmt_int, fmt_percent
 
 
-def status_printer_loop(interval_sec: int, stop_event) -> None:
+def status_printer_loop(interval_sec: int, stop_event, console=None) -> None:
     while not stop_event.is_set():
+        if console is not None and console.should_pause_live_output():
+            stop_event.wait(0.2)
+            continue
+
         with STATUS_LOCK:
             lat = STATUS.latitude
             lon = STATUS.longitude
@@ -77,44 +81,47 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
         elif battery_present is False:
             battery_present_text = "NO"
 
-        print("\n=== ROVER STATUS ===", flush=True)
-        print(f"Latitude        : {fmt(lat, 8)}", flush=True)
-        print(f"Longitude       : {fmt(lon, 8)}", flush=True)
-        print(f"Altitude (m)    : {fmt(alt, 3)}", flush=True)
-        print(f"Satellites      : {fmt_int(sats)}", flush=True)
-        print(f"HDOP            : {fmt(hdop, 2)}", flush=True)
-        print(f"Fix / RTK Mode  : {fix_label}", flush=True)
-        print(f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}", flush=True)
-        print(f"NTRIP Status    : {ntrip_text}", flush=True)
-        print(f"NTRIP Response  : {ntrip_last_response or '-'}", flush=True)
-        print(f"Last RTCM Age   : {rtcm_age}", flush=True)
-        print(f"RTCM Bytes      : {rtcm_bytes}", flush=True)
-        print(f"RTCM Frames     : {rtcm_frames}", flush=True)
-        print(f"RTCM Last Type  : {rtcm_last_type if rtcm_last_type is not None else '-'}", flush=True)
-        print(f"RTCM Has ARP    : {'YES' if rtcm_has_station_frame else 'NO'}", flush=True)
-        print(f"RTCM Has MSM    : {'YES' if rtcm_has_observation_frame else 'NO'}", flush=True)
-        print(f"RTCM Recent     : {rtcm_recent_types}", flush=True)
-        print(f"Last NMEA Age   : {nmea_age}", flush=True)
-        print(f"Last GGA Age    : {gga_age}", flush=True)
-        print(f"Last GGA Sent   : {gga_sent_age}", flush=True)
-        print(f"Battery Level   : {fmt_percent(battery_percent)}", flush=True)
-        print(f"Battery Voltage : {fmt(battery_voltage_v, 3)} V", flush=True)
-        print(f"Battery Current : {fmt(battery_current_a, 3)} A", flush=True)
-        print(f"Battery Power   : {fmt(battery_power_w, 3)} W", flush=True)
-        print(f"Battery Status  : {battery_status}", flush=True)
-        print(f"Battery Present : {battery_present_text}", flush=True)
-        print(f"Battery Age     : {battery_age}", flush=True)
-        print(f"Peer Tx Age     : {peer_broadcast_age}", flush=True)
-        print(f"Peer Rx Age     : {peer_receive_age}", flush=True)
-        print(f"Peer Count      : {len(peers)}", flush=True)
+        lines = [
+            "",
+            "=== ROVER STATUS ===",
+            f"Latitude        : {fmt(lat, 8)}",
+            f"Longitude       : {fmt(lon, 8)}",
+            f"Altitude (m)    : {fmt(alt, 3)}",
+            f"Satellites      : {fmt_int(sats)}",
+            f"HDOP            : {fmt(hdop, 2)}",
+            f"Fix / RTK Mode  : {fix_label}",
+            f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}",
+            f"NTRIP Status    : {ntrip_text}",
+            f"NTRIP Response  : {ntrip_last_response or '-'}",
+            f"Last RTCM Age   : {rtcm_age}",
+            f"RTCM Bytes      : {rtcm_bytes}",
+            f"RTCM Frames     : {rtcm_frames}",
+            f"RTCM Last Type  : {rtcm_last_type if rtcm_last_type is not None else '-'}",
+            f"RTCM Has ARP    : {'YES' if rtcm_has_station_frame else 'NO'}",
+            f"RTCM Has MSM    : {'YES' if rtcm_has_observation_frame else 'NO'}",
+            f"RTCM Recent     : {rtcm_recent_types}",
+            f"Last NMEA Age   : {nmea_age}",
+            f"Last GGA Age    : {gga_age}",
+            f"Last GGA Sent   : {gga_sent_age}",
+            f"Battery Level   : {fmt_percent(battery_percent)}",
+            f"Battery Voltage : {fmt(battery_voltage_v, 3)} V",
+            f"Battery Current : {fmt(battery_current_a, 3)} A",
+            f"Battery Power   : {fmt(battery_power_w, 3)} W",
+            f"Battery Status  : {battery_status}",
+            f"Battery Present : {battery_present_text}",
+            f"Battery Age     : {battery_age}",
+            f"Peer Tx Age     : {peer_broadcast_age}",
+            f"Peer Rx Age     : {peer_receive_age}",
+            f"Peer Count      : {len(peers)}",
+        ]
         if ntrip_last_error:
-            print(f"NTRIP Error     : {ntrip_last_error}", flush=True)
+            lines.append(f"NTRIP Error     : {ntrip_last_error}")
         if battery_last_error:
-            print(f"Battery Error   : {battery_last_error}", flush=True)
+            lines.append(f"Battery Error   : {battery_last_error}")
         if peer_last_error:
-            print(f"Peer UDP Error  : {peer_last_error}", flush=True)
+            lines.append(f"Peer UDP Error  : {peer_last_error}")
         if peers:
-            print("--- PEERS ---", flush=True)
+            lines.append("--- PEERS ---")
             for peer in sorted(peers, key=lambda item: item.device_id):
                 peer_age_sec = None if peer.received_at is None else (now - peer.received_at)
                 is_stale = (
@@ -126,12 +133,16 @@ def status_printer_loop(interval_sec: int, stop_event) -> None:
                 uncertainty_text = fmt(peer.combined_accuracy_m, 3) if not is_stale else "-"
                 peer_age_text = "-" if peer_age_sec is None else f"{peer_age_sec:.1f}s"
                 freshness = "STALE" if is_stale else "FRESH"
-                print(
+                lines.append(
                     f"{peer.device_id:<15} safe={conservative_distance_text} m raw={distance_text} m age={peer_age_text} "
                     f"fix={peer.fix_label} acc={fmt(peer.accuracy_m, 3)} m "
-                    f"uncertainty={uncertainty_text} m {freshness}",
-                    flush=True,
+                    f"uncertainty={uncertainty_text} m {freshness}"
                 )
-        print("====================\n", flush=True)
+        lines.extend(["====================", ""])
+
+        if console is not None:
+            console.write_status_block(lines)
+        else:
+            print("\n".join(lines), flush=True)
 
         stop_event.wait(interval_sec)

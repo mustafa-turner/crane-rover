@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import threading
 import time
@@ -6,6 +7,7 @@ import time
 from rover.battery import battery_monitor_loop
 from rover.blynk import blynk_loop
 from rover.config import load_config, setup_logging
+from rover.console import SerialConsoleManager
 from rover.gnss import nmea_reader_loop, open_serial
 from rover.ntrip import ntrip_loop
 from rover.peer_udp import peer_udp_loop
@@ -16,7 +18,11 @@ def main() -> int:
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     config = load_config(config_path)
 
-    setup_logging(config.get("logging", {}).get("level", "INFO"))
+    console = SerialConsoleManager(config_path, config)
+    setup_logging(
+        config.get("logging", {}).get("level", "INFO"),
+        handlers=console.create_log_handlers(),
+    )
 
     serial_cfg = config["serial"]
     status_cfg = config.get("status", {})
@@ -26,6 +32,9 @@ def main() -> int:
 
     ser = open_serial(serial_cfg)
     stop_event = threading.Event()
+    restart_requested = False
+
+    console.start()
 
     nmea_thread = threading.Thread(
         target=nmea_reader_loop,
@@ -41,7 +50,7 @@ def main() -> int:
     if status_cfg.get("enabled", True):
         printer_thread = threading.Thread(
             target=status_printer_loop,
-            args=(int(status_cfg.get("printIntervalSec", 2)), stop_event),
+            args=(int(status_cfg.get("printIntervalSec", 2)), stop_event, console),
             daemon=True,
         )
     battery_thread = None
@@ -82,11 +91,17 @@ def main() -> int:
 
     try:
         while True:
-            time.sleep(1)
+            if console.consume_menu_request():
+                menu_result = console.run_menu(config)
+                if menu_result.restart_requested:
+                    restart_requested = True
+                    break
+            time.sleep(0.2)
     except KeyboardInterrupt:
         logging.info("Stopping...")
     finally:
         stop_event.set()
+        console.stop()
         nmea_thread.join(timeout=2)
         ntrip_thread.join(timeout=2)
         if printer_thread is not None:
@@ -98,6 +113,10 @@ def main() -> int:
         if blynk_thread is not None:
             blynk_thread.join(timeout=2)
         ser.close()
+
+    if restart_requested:
+        logging.shutdown()
+        os.execv(sys.executable, [sys.executable, *sys.argv])
 
     return 0
 
