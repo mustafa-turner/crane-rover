@@ -125,18 +125,18 @@ sudo apt-get install -y i2c-tools python3-smbus
 
 ## USB Gadget Serial Setup
 
-`raspi-config` does not configure USB gadget serial. It can configure the normal UART serial port, but not a USB CDC-ACM gadget that creates `/dev/ttyGS0`.
+`raspi-config` does not configure USB gadget serial. It can configure the onboard UART, but not a USB CDC-ACM gadget device such as `/dev/ttyGS0`.
 
-This repo expects the service-side serial menu to use `/dev/ttyGS0`, hardcoded in [rover/console.py](/Users/mustafa/Documents/GitHub/crane-rover/rover/console.py:1).
+This project uses `/dev/ttyGS0` as the service-side console endpoint, hardcoded in [rover/console.py](/Users/mustafa/Documents/GitHub/crane-rover/rover/console.py:1).
 
-### When This Applies
+### Applicability
 
-Use this only if your Raspberry Pi supports USB device/gadget mode on the port you connect to your Mac.
+Use this only on Raspberry Pi models and ports that support USB device mode.
 
-Common cases:
+Typical cases:
 
 - Pi Zero / Zero 2 W: use the USB data port, not the power-only port
-- Pi 4 / Pi 5 / Pi 500: use the board USB-C port if your OS/kernel/device-mode setup supports it
+- Pi 4 / Pi 5 / Pi 500: use the board USB-C port if device mode is supported in the deployed OS/kernel configuration
 
 ### 1. Enable `dwc2` at boot
 
@@ -146,24 +146,15 @@ Add this line to `/boot/firmware/config.txt`:
 dtoverlay=dwc2
 ```
 
-Then add `modules-load=dwc2` to the single line in `/boot/firmware/cmdline.txt`.
+Add `modules-load=dwc2` to the kernel command line in `/boot/firmware/cmdline.txt`.
 
 ### 2. Install the gadget script
 
-This repo includes a ready-made script at [systemd/usb-gadget-serial.sh](/Users/mustafa/Documents/GitHub/crane-rover/systemd/usb-gadget-serial.sh:1).
-
-Install it on the Pi:
+Install [systemd/usb-gadget-serial.sh](/Users/mustafa/Documents/GitHub/crane-rover/systemd/usb-gadget-serial.sh:1):
 
 ```bash
 sudo install -m 0755 systemd/usb-gadget-serial.sh /usr/local/bin/usb-gadget-serial.sh
 ```
-
-What it does:
-
-- loads `libcomposite`
-- creates a USB gadget under `/sys/kernel/config/usb_gadget/crane`
-- exposes a CDC-ACM serial function
-- binds it to the first available UDC unless `USB_GADGET_UDC` is set
 
 Optional environment overrides:
 
@@ -177,9 +168,7 @@ Optional environment overrides:
 
 ### 3. Install the `systemd` unit
 
-This repo includes [systemd/usb-gadget-serial.service](/Users/mustafa/Documents/GitHub/crane-rover/systemd/usb-gadget-serial.service:1).
-
-Install and enable it:
+Install and enable [systemd/usb-gadget-serial.service](/Users/mustafa/Documents/GitHub/crane-rover/systemd/usb-gadget-serial.service:1):
 
 ```bash
 sudo install -m 0644 systemd/usb-gadget-serial.service /etc/systemd/system/usb-gadget-serial.service
@@ -193,35 +182,26 @@ sudo systemctl enable usb-gadget-serial.service
 sudo reboot
 ```
 
-After reboot, on the Pi:
+After reboot, verify on the Pi:
 
 ```bash
 ls -l /dev/ttyGS0
 systemctl status usb-gadget-serial.service
 ```
 
-If gadget mode started correctly, `/dev/ttyGS0` should exist.
+If gadget mode initialized correctly, `/dev/ttyGS0` should exist.
 
-### 5. Connect from macOS
+### 5. Connect From the Host
 
-On your Mac, after plugging the Pi into the correct USB data port, look for a new serial device:
+Connect the Raspberry Pi to the host using the correct USB device-mode port, then open the serial device exposed by the host operating system. Use `115200` baud.
 
-```bash
-ls /dev/cu.*
-```
-
-Usually it will look like:
-
-- `/dev/cu.usbmodem...`
-- or `/dev/cu.usbserial...`
-
-Open that device in VS Code `nRF Serial Terminal` at `115200`.
+On most hosts, the USB gadget will appear as a new serial device after enumeration. Use that device in your serial terminal application.
 
 ### Notes
 
 - The rover app uses `/dev/ttyGS0` for the settings console and `serial.port` for the GNSS receiver. These must be different interfaces.
-- If your Mac shows only Bluetooth-style `/dev/tty.*` entries, the Pi is not enumerating as a USB serial gadget yet.
-- If `/dev/ttyGS0` never appears, your Pi model, USB port, cable, or OS setup may not support gadget mode in the current configuration.
+- If the host does not detect a new serial device, the Raspberry Pi is not enumerating as a USB serial gadget.
+- If `/dev/ttyGS0` does not appear on the Pi, the hardware, selected USB port, cable, or OS configuration does not currently support gadget mode.
 
 ## Configuration
 
@@ -237,7 +217,7 @@ Then edit:
 nano config.yaml
 ```
 
-If you run the rover directly from a serial console or SSH terminal, the app supports live config editing:
+If the rover runs in an interactive terminal, the app supports live config editing:
 
 - leave it idle to watch logs and status
 - press any key to open the settings menu
@@ -253,7 +233,7 @@ The editor infers the value type from the current setting:
 - `null` clears a value
 - pressing Enter keeps the current value
 
-For the auto-started `systemd` service, the serial settings menu is now intentionally hardcoded in [rover/console.py](/Users/mustafa/Documents/GitHub/crane-rover/rover/console.py:1) so users cannot break access by editing `config.yaml`.
+For the auto-started `systemd` service, the serial settings menu is intentionally hardcoded in [rover/console.py](/Users/mustafa/Documents/GitHub/crane-rover/rover/console.py:1) so the console transport cannot be changed from `config.yaml`.
 
 The current hardcoded console settings are:
 
