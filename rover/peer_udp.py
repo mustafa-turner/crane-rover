@@ -110,6 +110,13 @@ def parse_peer_message(data: bytes) -> dict:
     return payload
 
 
+def get_extra_targets(peer_cfg: dict) -> list[str]:
+    raw_targets = peer_cfg.get("extraTargets", [])
+    if not isinstance(raw_targets, list):
+        return []
+    return [str(target).strip() for target in raw_targets if str(target).strip()]
+
+
 def build_peer_status_from_message(
     payload: dict,
     source_host: str,
@@ -164,6 +171,7 @@ def peer_udp_loop(peer_cfg: dict, stop_event) -> None:
     device_id = str(peer_cfg.get("deviceId") or socket.gethostname())
     bind_host = str(peer_cfg.get("listenHost", ""))
     broadcast_host = str(peer_cfg.get("broadcastHost", "255.255.255.255"))
+    extra_targets = get_extra_targets(peer_cfg)
     port = int(peer_cfg.get("port", 5005))
     recv_poll_timeout = float(peer_cfg.get("recvPollTimeoutSec", 0.2))
     broadcast_interval = float(peer_cfg.get("broadcastIntervalSec", 1.0))
@@ -174,7 +182,14 @@ def peer_udp_loop(peer_cfg: dict, stop_event) -> None:
     sock.bind((bind_host, port))
     sock.settimeout(recv_poll_timeout)
 
-    logging.info("Peer UDP started device_id=%s bind=%s:%s broadcast=%s", device_id, bind_host or "*", port, broadcast_host)
+    logging.info(
+        "Peer UDP started device_id=%s bind=%s:%s broadcast=%s extra_targets=%s",
+        device_id,
+        bind_host or "*",
+        port,
+        broadcast_host,
+        extra_targets,
+    )
 
     next_broadcast_at = 0.0
     try:
@@ -182,7 +197,13 @@ def peer_udp_loop(peer_cfg: dict, stop_event) -> None:
             now = time.time()
             if now >= next_broadcast_at:
                 payload = build_peer_payload(device_id, peer_cfg)
-                sock.sendto(json.dumps(payload).encode("utf-8"), (broadcast_host, port))
+                encoded = json.dumps(payload).encode("utf-8")
+                sock.sendto(encoded, (broadcast_host, port))
+                for target in extra_targets:
+                    try:
+                        sock.sendto(encoded, (target, port))
+                    except OSError as exc:
+                        logging.debug("Peer UDP send failed to %s:%s: %s", target, port, exc)
                 update_peer_runtime_state(last_broadcast_at=payload["sent_at"], error=None)
                 next_broadcast_at = now + broadcast_interval
 

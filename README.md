@@ -128,6 +128,20 @@ sudo apt-get install -y i2c-tools python3-smbus
 
 `smbus2` is already listed in `requirements.txt`, but `python3-smbus` and `i2c-tools` are still useful on Raspberry Pi OS for debugging.
 
+### 5. Optional: Install ZeroTier
+
+If the rover should be reachable over a ZeroTier network, install and join it on the Pi:
+
+```bash
+sudo apt update
+sudo apt upgrade -y
+curl -s https://install.zerotier.com | sudo bash
+sudo zerotier-cli join <your_network_id>
+sudo zerotier-cli status
+```
+
+After joining, authorize the device in ZeroTier Central under the target network's member list.
+
 ## USB Gadget Serial Setup
 
 `raspi-config` does not configure USB gadget serial. It can configure the onboard UART, but not a USB CDC-ACM gadget device such as `/dev/ttyGS0`.
@@ -282,6 +296,7 @@ peerUdp:
   deviceId: rover-01
   port: 5005
   broadcastHost: 255.255.255.255
+  extraTargets: []
   listenHost: ""
   broadcastIntervalSec: 1.0
   recvPollTimeoutSec: 0.2
@@ -403,6 +418,8 @@ This controls peer-to-peer rover awareness.
   UDP port shared by all rovers.
 - `broadcastHost`
   Usually `255.255.255.255`.
+- `extraTargets`
+  Optional list of unicast peer IP addresses. This is typically used for ZeroTier peer addresses.
 - `listenHost`
   Usually empty string `""` to bind all interfaces.
 - `broadcastIntervalSec`

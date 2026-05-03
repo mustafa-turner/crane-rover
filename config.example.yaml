@@ -55,6 +55,9 @@ peerUdp:
   deviceId: rover-01
   port: 5005
   broadcastHost: 255.255.255.255
+  # Optional extra unicast targets. This is usually where you put
+  # ZeroTier peer IP addresses if you want peer updates off-LAN too.
+  extraTargets: []
   listenHost: ""
   broadcastIntervalSec: 1.0
   recvPollTimeoutSec: 0.2

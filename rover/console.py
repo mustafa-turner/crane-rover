@@ -38,6 +38,8 @@ def format_value(value: Any, *, key: str = "") -> str:
         return "null"
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value) if value else "[]"
     if isinstance(value, int) and "address" in key.lower():
         return f"0x{value:x} ({value})"
     return str(value)
@@ -66,6 +68,15 @@ def parse_scalar(raw: str, current: Any) -> Any:
         return float(text)
 
     return text
+
+
+def parse_list(raw: str, current: list[Any]) -> list[str]:
+    text = raw.strip()
+    if text == "":
+        return current
+    if text == "[]":
+        return []
+    return [item.strip() for item in text.split(",") if item.strip()]
 
 
 def ordered_items(node: dict[str, Any]) -> list[tuple[str, Any]]:
@@ -382,6 +393,8 @@ class SerialConsoleManager:
             key, value = items[index]
             if isinstance(value, dict):
                 self._edit_mapping(target, f"{title}.{key}", value)
+            elif isinstance(value, list):
+                node[key] = self._prompt_for_list(target, key, value)
             else:
                 node[key] = self._prompt_for_scalar(target, key, value)
 
@@ -392,6 +405,18 @@ class SerialConsoleManager:
             raw = target.read_line("New value: ")
             try:
                 new_value = parse_scalar(raw, current)
+                self._write(target, f"Updated {key} to {format_value(new_value, key=key)}\n")
+                return new_value
+            except ValueError as exc:
+                self._write(target, f"Invalid value: {exc}\n")
+
+    def _prompt_for_list(self, target: _OutputTarget, key: str, current: list[Any]) -> list[str]:
+        self._write(target, f"Current value for {key}: {format_value(current, key=key)}\n")
+        self._write(target, "Enter a comma-separated list. Use [] to clear it. Press Enter to keep the current value.\n")
+        while True:
+            raw = target.read_line("New value: ")
+            try:
+                new_value = parse_list(raw, current)
                 self._write(target, f"Updated {key} to {format_value(new_value, key=key)}\n")
                 return new_value
             except ValueError as exc:
