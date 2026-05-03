@@ -12,6 +12,7 @@ from rover.gnss import nmea_reader_loop, open_serial
 from rover.ntrip import ntrip_loop
 from rover.peer_udp import peer_udp_loop
 from rover.status import status_printer_loop
+from rover.wifi import apply_preferred_wifi
 
 
 def main() -> int:
@@ -29,6 +30,9 @@ def main() -> int:
     blynk_cfg = config.get("blynk", {})
     battery_cfg = config.get("battery", {})
     peer_cfg = config.get("peerUdp", {})
+    wifi_cfg = config.get("wifi", {})
+
+    apply_preferred_wifi(wifi_cfg)
 
     ser = open_serial(serial_cfg)
     stop_event = threading.Event()

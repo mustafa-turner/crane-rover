@@ -2,6 +2,18 @@ serial:
   port: /dev/serial0
   baudrate: 115200
 
+wifi:
+  enabled: false
+  interface: wlan0
+  network1Ssid: ""
+  network1Password: ""
+  network2Ssid: ""
+  network2Password: ""
+  network3Ssid: ""
+  network3Password: ""
+  network4Ssid: ""
+  network4Password: ""
+
 ntrip:
   host: your.ntrip.caster.host
   port: 2101

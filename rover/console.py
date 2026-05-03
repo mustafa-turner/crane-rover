@@ -18,6 +18,7 @@ from rover.config import save_config
 
 SECTION_ORDER = [
     "serial",
+    "wifi",
     "ntrip",
     "logging",
     "status",

@@ -9,6 +9,7 @@ This project is built around a GNSS receiver, an NTRIP correction link, an optio
 Each rover can:
 
 - read NMEA from a GNSS receiver over serial
+- select a preferred Wi-Fi network from up to four configured SSIDs
 - connect to an NTRIP caster and forward RTCM corrections back into the receiver
 - track rover fix mode, HDOP, RTCM activity, and battery telemetry
 - broadcast its latest timestamped position and accuracy to nearby rover devices over UDP
@@ -24,6 +25,8 @@ Each rover can:
 
 - `rover/gnss.py`
   Reads NMEA sentences from the GNSS receiver.
+- `rover/wifi.py`
+  Selects the first available configured Wi-Fi network through NetworkManager.
 - `rover/ntrip.py`
   Connects to the NTRIP caster and forwards RTCM data to the receiver.
 - `rover/status.py`
@@ -51,16 +54,17 @@ The design is intentionally simple:
 
 At runtime, the normal flow is:
 
-1. Open the GNSS serial port.
-2. Start reading NMEA from the receiver.
-3. Start NTRIP and inject RTCM corrections into the receiver.
-4. Update shared rover state from GNSS and RTCM data.
-5. Optionally read UPS battery telemetry.
-6. Broadcast local rover state to peers over UDP.
-7. Receive peer state and calculate nearest-peer distance and safety margin.
-8. Print everything to the terminal.
-9. Optionally publish a compact telemetry payload to Blynk.
-10. If running on a real TTY, enter the settings menu when any key is pressed.
+1. Optionally switch Wi-Fi to the first available configured SSID.
+2. Open the GNSS serial port.
+3. Start reading NMEA from the receiver.
+4. Start NTRIP and inject RTCM corrections into the receiver.
+5. Update shared rover state from GNSS and RTCM data.
+6. Optionally read UPS battery telemetry.
+7. Broadcast local rover state to peers over UDP.
+8. Receive peer state and calculate nearest-peer distance and safety margin.
+9. Print everything to the terminal.
+10. Optionally publish a compact telemetry payload to Blynk.
+11. If running on a real TTY, enter the settings menu when any key is pressed.
 
 ## Project Files
 
@@ -85,6 +89,7 @@ Typical environment:
 - Raspberry Pi
 - Python 3
 - GNSS receiver connected by UART/serial
+- NetworkManager with `nmcli` available if Wi-Fi auto-selection is enabled
 - NTRIP caster credentials
 - network access for NTRIP and optionally Blynk
 - optional Waveshare UPS HAT (C)
@@ -227,6 +232,18 @@ serial:
   port: /dev/serial0
   baudrate: 115200
 
+wifi:
+  enabled: false
+  interface: wlan0
+  network1Ssid: ""
+  network1Password: ""
+  network2Ssid: ""
+  network2Password: ""
+  network3Ssid: ""
+  network3Password: ""
+  network4Ssid: ""
+  network4Password: ""
+
 ntrip:
   host: your.ntrip.caster.host
   port: 2101
@@ -291,6 +308,17 @@ blynk:
   Serial device path for the GNSS receiver. On Raspberry Pi this is often `/dev/serial0`.
 - `baudrate`
   UART speed for the GNSS receiver.
+
+### `wifi`
+
+- `enabled`
+  Enables preferred Wi-Fi selection at startup.
+- `interface`
+  Wi-Fi interface name, usually `wlan0`.
+- `network1Ssid` to `network4Ssid`
+  Preferred SSIDs in priority order.
+- `network1Password` to `network4Password`
+  Passwords paired with the configured SSIDs.
 
 ### `ntrip`
 
