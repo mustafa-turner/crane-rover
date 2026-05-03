@@ -26,6 +26,7 @@ logging:
 
 status:
   enabled: true
+  mode: normal
 
 battery:
   enabled: true

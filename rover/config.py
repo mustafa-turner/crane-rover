@@ -36,6 +36,7 @@ PUBLIC_CONFIG_TEMPLATE = {
     },
     "status": {
         "enabled": True,
+        "mode": "normal",
     },
     "battery": {
         "enabled": True,

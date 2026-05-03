@@ -5,7 +5,10 @@ import time
 from rover.state import STATUS, STATUS_LOCK, fmt, fmt_int, fmt_percent
 
 
-def status_printer_loop(interval_sec: int, stop_event, console=None) -> None:
+STATUS_INTERVAL_SEC = 2
+
+
+def status_printer_loop(interval_sec: int, stop_event, console=None, mode: str = "normal") -> None:
     while not stop_event.is_set():
         if console is not None and console.should_pause_live_output():
             stop_event.wait(0.2)
@@ -81,39 +84,60 @@ def status_printer_loop(interval_sec: int, stop_event, console=None) -> None:
         elif battery_present is False:
             battery_present_text = "NO"
 
-        lines = [
-            "",
-            "=== ROVER STATUS ===",
-            f"Latitude        : {fmt(lat, 8)}",
-            f"Longitude       : {fmt(lon, 8)}",
-            f"Altitude (m)    : {fmt(alt, 3)}",
-            f"Satellites      : {fmt_int(sats)}",
-            f"HDOP            : {fmt(hdop, 2)}",
-            f"Fix / RTK Mode  : {fix_label}",
-            f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}",
-            f"NTRIP Status    : {ntrip_text}",
-            f"NTRIP Response  : {ntrip_last_response or '-'}",
-            f"Last RTCM Age   : {rtcm_age}",
-            f"RTCM Bytes      : {rtcm_bytes}",
-            f"RTCM Frames     : {rtcm_frames}",
-            f"RTCM Last Type  : {rtcm_last_type if rtcm_last_type is not None else '-'}",
-            f"RTCM Has ARP    : {'YES' if rtcm_has_station_frame else 'NO'}",
-            f"RTCM Has MSM    : {'YES' if rtcm_has_observation_frame else 'NO'}",
-            f"RTCM Recent     : {rtcm_recent_types}",
-            f"Last NMEA Age   : {nmea_age}",
-            f"Last GGA Age    : {gga_age}",
-            f"Last GGA Sent   : {gga_sent_age}",
-            f"Battery Level   : {fmt_percent(battery_percent)}",
-            f"Battery Voltage : {fmt(battery_voltage_v, 3)} V",
-            f"Battery Current : {fmt(battery_current_a, 3)} A",
-            f"Battery Power   : {fmt(battery_power_w, 3)} W",
-            f"Battery Status  : {battery_status}",
-            f"Battery Present : {battery_present_text}",
-            f"Battery Age     : {battery_age}",
-            f"Peer Tx Age     : {peer_broadcast_age}",
-            f"Peer Rx Age     : {peer_receive_age}",
-            f"Peer Count      : {len(peers)}",
-        ]
+        status_mode = (mode or "normal").strip().lower()
+        if status_mode == "debug":
+            lines = [
+                "",
+                "=== ROVER STATUS (DEBUG) ===",
+                f"Latitude        : {fmt(lat, 8)}",
+                f"Longitude       : {fmt(lon, 8)}",
+                f"Altitude (m)    : {fmt(alt, 3)}",
+                f"Satellites      : {fmt_int(sats)}",
+                f"HDOP            : {fmt(hdop, 2)}",
+                f"Fix / RTK Mode  : {fix_label}",
+                f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}",
+                f"NTRIP Status    : {ntrip_text}",
+                f"NTRIP Response  : {ntrip_last_response or '-'}",
+                f"Last RTCM Age   : {rtcm_age}",
+                f"RTCM Bytes      : {rtcm_bytes}",
+                f"RTCM Frames     : {rtcm_frames}",
+                f"RTCM Last Type  : {rtcm_last_type if rtcm_last_type is not None else '-'}",
+                f"RTCM Has ARP    : {'YES' if rtcm_has_station_frame else 'NO'}",
+                f"RTCM Has MSM    : {'YES' if rtcm_has_observation_frame else 'NO'}",
+                f"RTCM Recent     : {rtcm_recent_types}",
+                f"Last NMEA Age   : {nmea_age}",
+                f"Last GGA Age    : {gga_age}",
+                f"Last GGA Sent   : {gga_sent_age}",
+                f"Battery Level   : {fmt_percent(battery_percent)}",
+                f"Battery Voltage : {fmt(battery_voltage_v, 3)} V",
+                f"Battery Current : {fmt(battery_current_a, 3)} A",
+                f"Battery Power   : {fmt(battery_power_w, 3)} W",
+                f"Battery Status  : {battery_status}",
+                f"Battery Present : {battery_present_text}",
+                f"Battery Age     : {battery_age}",
+                f"Peer Tx Age     : {peer_broadcast_age}",
+                f"Peer Rx Age     : {peer_receive_age}",
+                f"Peer Count      : {len(peers)}",
+            ]
+        else:
+            lines = [
+                "",
+                "=== ROVER STATUS ===",
+                f"Latitude        : {fmt(lat, 8)}",
+                f"Longitude       : {fmt(lon, 8)}",
+                f"Altitude (m)    : {fmt(alt, 3)}",
+                f"Fix / RTK Mode  : {fix_label}",
+                f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}",
+                f"NTRIP Status    : {ntrip_text}",
+                f"Last RTCM Age   : {rtcm_age}",
+                f"Battery Level   : {fmt_percent(battery_percent)}",
+                f"Battery Voltage : {fmt(battery_voltage_v, 3)} V",
+                f"Peer Count      : {len(peers)}",
+            ]
+            if battery_current_a is not None:
+                lines.append(f"Battery Current : {fmt(battery_current_a, 3)} A")
+            if battery_power_w is not None:
+                lines.append(f"Battery Power   : {fmt(battery_power_w, 3)} W")
         if ntrip_last_error:
             lines.append(f"NTRIP Error     : {ntrip_last_error}")
         if battery_last_error:
@@ -133,11 +157,17 @@ def status_printer_loop(interval_sec: int, stop_event, console=None) -> None:
                 uncertainty_text = fmt(peer.combined_accuracy_m, 3) if not is_stale else "-"
                 peer_age_text = "-" if peer_age_sec is None else f"{peer_age_sec:.1f}s"
                 freshness = "STALE" if is_stale else "FRESH"
-                lines.append(
-                    f"{peer.device_id:<15} safe={conservative_distance_text} m raw={distance_text} m age={peer_age_text} "
-                    f"fix={peer.fix_label} acc={fmt(peer.accuracy_m, 3)} m "
-                    f"uncertainty={uncertainty_text} m {freshness}"
-                )
+                if status_mode == "debug":
+                    lines.append(
+                        f"{peer.device_id:<15} safe={conservative_distance_text} m raw={distance_text} m age={peer_age_text} "
+                        f"fix={peer.fix_label} acc={fmt(peer.accuracy_m, 3)} m "
+                        f"uncertainty={uncertainty_text} m {freshness}"
+                    )
+                else:
+                    lines.append(
+                        f"{peer.device_id:<15} safe={conservative_distance_text} m raw={distance_text} m "
+                        f"age={peer_age_text} fix={peer.fix_label} {freshness}"
+                    )
         lines.extend(["====================", ""])
 
         if console is not None:

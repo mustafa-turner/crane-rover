@@ -270,6 +270,7 @@ logging:
 
 status:
   enabled: true
+  mode: normal
 
 battery:
   enabled: true
@@ -338,6 +339,8 @@ blynk:
 
 - `enabled`
   Whether the terminal status printer thread runs.
+- `mode`
+  `normal` for operator view or `debug` for full diagnostics.
 
 ### `battery`
 
