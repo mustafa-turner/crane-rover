@@ -201,21 +201,30 @@ def fix_quality_to_label(quality: Optional[int]) -> str:
 
 
 def fmt(value: Optional[float], digits: int = 6) -> str:
-    if value is None:
+    if value is None or value == "":
         return "-"
-    return f"{value:.{digits}f}"
+    try:
+        return f"{float(value):.{digits}f}"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def fmt_int(value: Optional[int]) -> str:
-    if value is None:
+    if value is None or value == "":
         return "-"
-    return str(value)
+    try:
+        return str(int(float(value)))
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def fmt_percent(value: Optional[float], digits: int = 1) -> str:
-    if value is None:
+    if value is None or value == "":
         return "-"
-    return f"{value:.{digits}f}%"
+    try:
+        return f"{float(value):.{digits}f}%"
+    except (TypeError, ValueError):
+        return f"{value}%"
 
 
 def store_latest_gga(raw_data: bytes) -> None:
