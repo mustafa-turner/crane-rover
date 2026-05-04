@@ -20,6 +20,12 @@ class WifiSlot:
     password: str
 
 
+@dataclass
+class VisibleWifiNetwork:
+    ssid: str
+    security: str
+
+
 def apply_preferred_wifi(wifi_cfg: dict) -> None:
     _ensure_wifi(wifi_cfg, reconnect_only=False)
 
@@ -57,24 +63,37 @@ def _ensure_wifi(wifi_cfg: dict, *, reconnect_only: bool) -> None:
     if reconnect_only and current_ssid:
         return
 
-    visible_ssids = _scan_visible_ssids(interface)
-    if not visible_ssids:
+    visible_networks = _scan_visible_networks(interface)
+    if not visible_networks:
         logging.warning("Wi-Fi scan returned no visible SSIDs on %s", interface)
         return
 
     attempted_connection = False
+    missing_password = False
     for slot in slots:
-        if slot.ssid not in visible_ssids:
+        network = visible_networks.get(slot.ssid)
+        if network is None:
             continue
-        attempted_connection = True
         if current_ssid == slot.ssid:
             logging.info("Wi-Fi already connected to preferred SSID %s", slot.ssid)
             return
+        if _requires_password(network) and not slot.password:
+            missing_password = True
+            logging.warning(
+                "Wi-Fi SSID %s is secured (%s), but wifi.network%sPassword is empty",
+                slot.ssid,
+                network.security,
+                slot.index,
+            )
+            continue
+        attempted_connection = True
         if _connect_slot(interface, slot):
             return
 
     if attempted_connection:
         logging.warning("Configured Wi-Fi SSIDs are visible on %s, but connection attempts failed", interface)
+    elif missing_password:
+        logging.warning("Configured Wi-Fi SSIDs are visible on %s, but required passwords are missing", interface)
     else:
         logging.warning("None of the configured Wi-Fi SSIDs are currently available on %s", interface)
 
@@ -103,14 +122,51 @@ def _run_nmcli(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _scan_visible_ssids(interface: str) -> set[str]:
-    result = _run_nmcli(["-t", "-f", "SSID", "dev", "wifi", "list", "ifname", interface, "--rescan", "yes"])
+def _scan_visible_networks(interface: str) -> dict[str, VisibleWifiNetwork]:
+    result = _run_nmcli(["-t", "-f", "SSID,SECURITY", "dev", "wifi", "list", "ifname", interface, "--rescan", "yes"])
     if result.returncode != 0:
         message = _nmcli_message(result)
         logging.warning("Wi-Fi scan failed on %s: %s", interface, message)
         _log_nmcli_permission_hint(message)
-        return set()
-    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+        return {}
+
+    networks: dict[str, VisibleWifiNetwork] = {}
+    for line in result.stdout.splitlines():
+        fields = _split_nmcli_terse_line(line)
+        if not fields:
+            continue
+        ssid = fields[0].strip()
+        if not ssid:
+            continue
+        security = fields[1].strip() if len(fields) > 1 else ""
+        networks[ssid] = VisibleWifiNetwork(ssid=ssid, security=security)
+    return networks
+
+
+def _split_nmcli_terse_line(line: str) -> list[str]:
+    fields: list[str] = []
+    chars: list[str] = []
+    escaped = False
+    for char in line:
+        if escaped:
+            chars.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == ":":
+            fields.append("".join(chars))
+            chars = []
+        else:
+            chars.append(char)
+    if escaped:
+        chars.append("\\")
+    fields.append("".join(chars))
+    return fields
+
+
+def _requires_password(network: VisibleWifiNetwork) -> bool:
+    security = network.security.strip()
+    return bool(security and security != "--")
 
 
 def _current_ssid(interface: str) -> str | None:

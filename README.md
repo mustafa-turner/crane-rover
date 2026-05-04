@@ -245,6 +245,22 @@ Behavior:
 - saving from the menu rewrites `config.yaml` and restarts the rover process
 - the hardcoded console port must be different from `serial.port`, because `serial.port` is used for the GNSS receiver
 
+### Wi-Fi NetworkManager Permission
+
+If Wi-Fi auto-selection logs `Not authorized` or another NetworkManager permission error, run this on the rover after updating the repo. It installs the included polkit rule so the `pi` user can control NetworkManager through `nmcli`:
+
+```bash
+cd /home/pi/crane-rover
+sudo cp systemd/49-crane-rover-networkmanager.rules /etc/polkit-1/rules.d/49-crane-rover-networkmanager.rules
+sudo systemctl restart polkit
+```
+
+If the rover app is running as the systemd service, restart it after installing the rule:
+
+```bash
+sudo systemctl restart crane-rover.service
+```
+
 ### Example `config.yaml`
 
 ```yaml
@@ -427,14 +443,6 @@ Important assumptions in that unit:
 - the config file is `/home/pi/crane-rover/config.yaml`
 
 If your paths or username are different, edit the service file before installing it.
-
-If Wi-Fi auto-selection logs `Not authorized` or another NetworkManager permission error, grant the service user permission to control NetworkManager:
-
-```bash
-sudo cp systemd/49-crane-rover-networkmanager.rules /etc/polkit-1/rules.d/49-crane-rover-networkmanager.rules
-sudo systemctl restart polkit
-sudo systemctl restart crane-rover.service
-```
 
 ### Install the service
 
