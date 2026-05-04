@@ -32,6 +32,7 @@ CONSOLE_ENABLED = True
 CONSOLE_PORT = "/dev/ttyGS0"
 CONSOLE_BAUDRATE = 115200
 CONSOLE_READ_TIMEOUT_SEC = 0.2
+CONSOLE_WRITE_TIMEOUT_SEC = 0.2
 
 SECTION_HELP = {
     "serial": "GNSS receiver serial port settings.",
@@ -255,8 +256,14 @@ class _SerialPortTarget(_OutputTarget):
 
         baudrate = CONSOLE_BAUDRATE
         timeout = CONSOLE_READ_TIMEOUT_SEC
+        write_timeout = CONSOLE_WRITE_TIMEOUT_SEC
         try:
-            self._serial = serial.Serial(port=self.port, baudrate=baudrate, timeout=timeout)
+            self._serial = serial.Serial(
+                port=self.port,
+                baudrate=baudrate,
+                timeout=timeout,
+                write_timeout=write_timeout,
+            )
         except serial.SerialException as exc:
             logging.error("Failed to open console serial port %s: %s", self.port, exc)
             self.enabled = False
@@ -290,7 +297,6 @@ class _SerialPortTarget(_OutputTarget):
         with self._write_lock:
             try:
                 self._serial.write(payload)
-                self._serial.flush()
             except serial.SerialException:
                 pass
 

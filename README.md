@@ -237,6 +237,7 @@ The current hardcoded console settings are:
 - `CONSOLE_PORT = "/dev/ttyGS0"`
 - `CONSOLE_BAUDRATE = 115200`
 - `CONSOLE_READ_TIMEOUT_SEC = 0.2`
+- `CONSOLE_WRITE_TIMEOUT_SEC = 0.2`
 
 Behavior:
 
