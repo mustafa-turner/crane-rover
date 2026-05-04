@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 
 from rover.state import STATUS, STATUS_LOCK, fmt, fmt_int, fmt_percent
@@ -83,12 +84,14 @@ def status_printer_loop(interval_sec: int, stop_event, console=None, mode: str =
             battery_present_text = "YES"
         elif battery_present is False:
             battery_present_text = "NO"
+        status_time = time.strftime("%Y-%m-%d %H:%M:%S")
 
         status_mode = (mode or "normal").strip().lower()
         if status_mode == "debug":
             lines = [
                 "",
                 "=== ROVER STATUS (DEBUG) ===",
+                f"Status Time     : {status_time}",
                 f"Latitude        : {fmt(lat, 8)}",
                 f"Longitude       : {fmt(lon, 8)}",
                 f"Altitude (m)    : {fmt(alt, 3)}",
@@ -123,13 +126,18 @@ def status_printer_loop(interval_sec: int, stop_event, console=None, mode: str =
             lines = [
                 "",
                 "=== ROVER STATUS ===",
+                f"Status Time     : {status_time}",
                 f"Latitude        : {fmt(lat, 8)}",
                 f"Longitude       : {fmt(lon, 8)}",
                 f"Altitude (m)    : {fmt(alt, 3)}",
+                f"Satellites      : {fmt_int(sats)}",
+                f"HDOP            : {fmt(hdop, 2)}",
                 f"Fix / RTK Mode  : {fix_label}",
                 f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}",
                 f"NTRIP Status    : {ntrip_text}",
                 f"Last RTCM Age   : {rtcm_age}",
+                f"Last NMEA Age   : {nmea_age}",
+                f"Last GGA Age    : {gga_age}",
                 f"Battery Level   : {fmt_percent(battery_percent)}",
                 f"Battery Voltage : {fmt(battery_voltage_v, 3)} V",
                 f"Peer Count      : {len(peers)}",
@@ -170,9 +178,12 @@ def status_printer_loop(interval_sec: int, stop_event, console=None, mode: str =
                     )
         lines.extend(["====================", ""])
 
-        if console is not None:
-            console.write_status_block(lines)
-        else:
-            print("\n".join(lines), flush=True)
+        try:
+            if console is not None:
+                console.write_status_block(lines)
+            else:
+                print("\n".join(lines), flush=True)
+        except Exception as exc:
+            logging.error("Status printer write error: %s", exc)
 
         stop_event.wait(interval_sec)
