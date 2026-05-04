@@ -73,10 +73,23 @@ def load_config(path: str) -> dict:
 
 def save_config(path: str, config: dict) -> None:
     config = normalize_config(config)
+    payload = yaml.safe_dump(config, sort_keys=False, default_flow_style=False)
     tmp_path = f"{path}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
-    os.replace(tmp_path, path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp_path, path)
+    except PermissionError:
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(payload)
+        except Exception:
+            raise
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def setup_logging(level: str, *, handlers: list[logging.Handler] | None = None) -> None:

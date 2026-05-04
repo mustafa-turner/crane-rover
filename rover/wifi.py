@@ -101,7 +101,9 @@ def _run_nmcli(args: list[str]) -> subprocess.CompletedProcess[str]:
 def _scan_visible_ssids(interface: str) -> set[str]:
     result = _run_nmcli(["-t", "-f", "SSID", "dev", "wifi", "list", "ifname", interface, "--rescan", "yes"])
     if result.returncode != 0:
-        logging.warning("Wi-Fi scan failed on %s: %s", interface, result.stderr.strip() or result.stdout.strip())
+        message = _nmcli_message(result)
+        logging.warning("Wi-Fi scan failed on %s: %s", interface, message)
+        _log_nmcli_permission_hint(message)
         return set()
     return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
@@ -122,7 +124,9 @@ def _current_ssid(interface: str) -> str | None:
 
 def _connect_slot(interface: str, slot: WifiSlot) -> bool:
     connection_name = f"{CONNECTION_PREFIX}-{slot.index}"
-    _run_nmcli(["connection", "delete", connection_name])
+    delete_result = _run_nmcli(["connection", "delete", connection_name])
+    if delete_result.returncode != 0:
+        _log_nmcli_permission_hint(_nmcli_message(delete_result))
 
     args = [
         "--wait",
@@ -144,10 +148,36 @@ def _connect_slot(interface: str, slot: WifiSlot) -> bool:
         logging.info("Connected Wi-Fi interface %s to preferred SSID %s", interface, slot.ssid)
         return True
 
+    message = _nmcli_message(result)
     logging.warning(
         "Failed to connect Wi-Fi interface %s to SSID %s: %s",
         interface,
         slot.ssid,
-        result.stderr.strip() or result.stdout.strip(),
+        message,
     )
+    _log_nmcli_permission_hint(message)
     return False
+
+
+def _nmcli_message(result: subprocess.CompletedProcess[str]) -> str:
+    return result.stderr.strip() or result.stdout.strip() or f"nmcli exited with {result.returncode}"
+
+
+def _log_nmcli_permission_hint(message: str) -> None:
+    text = message.lower()
+    permission_markers = (
+        "not authorized",
+        "not authorised",
+        "permission denied",
+        "access denied",
+        "insufficient privileges",
+        "authorization",
+        "authorisation",
+    )
+    if not any(marker in text for marker in permission_markers):
+        return
+
+    logging.warning(
+        "NetworkManager refused Wi-Fi control. Grant the service user permission to manage "
+        "NetworkManager, or run the crane-rover service as root."
+    )

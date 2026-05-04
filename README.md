@@ -202,6 +202,12 @@ Create the local config:
 cp config.example.yaml config.yaml
 ```
 
+If the rover will run as the `pi` service user, make sure that user can rewrite the config file from the serial menu:
+
+```bash
+sudo chown pi:pi /home/pi/crane-rover /home/pi/crane-rover/config.yaml
+```
+
 Then edit:
 
 ```bash
@@ -212,7 +218,7 @@ If the rover runs in an interactive terminal, the app supports live config editi
 
 - leave it idle to watch logs and status
 - press any key to open the settings menu
-- enter section numbers such as `1` for `serial` or `2` for `ntrip`
+- enter section numbers such as `1` for `serial`, `2` for `wifi`, or `3` for `ntrip`
 - drill down into fields, enter a new value, then use `s` to save and restart
 - use `q` to leave the menu without saving
 
@@ -421,6 +427,14 @@ Important assumptions in that unit:
 - the config file is `/home/pi/crane-rover/config.yaml`
 
 If your paths or username are different, edit the service file before installing it.
+
+If Wi-Fi auto-selection logs `Not authorized` or another NetworkManager permission error, grant the service user permission to control NetworkManager:
+
+```bash
+sudo cp systemd/49-crane-rover-networkmanager.rules /etc/polkit-1/rules.d/49-crane-rover-networkmanager.rules
+sudo systemctl restart polkit
+sudo systemctl restart crane-rover.service
+```
 
 ### Install the service
 

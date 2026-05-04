@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import select
+import shlex
 import sys
 import termios
 import threading
@@ -413,7 +414,15 @@ class SerialConsoleManager:
                 if choice == "q":
                     break
                 if choice == "s":
-                    save_config(self.config_path, config)
+                    try:
+                        save_config(self.config_path, config)
+                    except OSError as exc:
+                        self._write(target, f"Save failed: {exc}\n")
+                        hint = self._save_error_hint(exc)
+                        if hint:
+                            self._write(target, hint)
+                        self._write(target, "Fix the issue, then choose s again. Choose q to exit without saving.\n")
+                        continue
                     self._write(target, f"Saved {self.config_path}. Restarting...\n")
                     result.restart_requested = True
                     break
@@ -528,3 +537,32 @@ class SerialConsoleManager:
     @staticmethod
     def _write(target: _OutputTarget, text: str) -> None:
         target.write(text)
+
+    def _save_error_hint(self, exc: OSError) -> str:
+        if not isinstance(exc, PermissionError):
+            return ""
+
+        path = os.path.abspath(self.config_path)
+        directory = os.path.dirname(path) or "."
+        user, group = _current_owner_labels()
+        quoted_directory = shlex.quote(directory)
+        quoted_path = shlex.quote(path)
+        return (
+            f"The rover process is running as {user} and needs write access to both:\n"
+            f"  {directory}\n"
+            f"  {path}\n"
+            "On the Pi, fix ownership with:\n"
+            f"  sudo chown {user}:{group} {quoted_directory} {quoted_path}\n"
+        )
+
+
+def _current_owner_labels() -> tuple[str, str]:
+    try:
+        import grp
+        import pwd
+
+        user = pwd.getpwuid(os.geteuid()).pw_name
+        group = grp.getgrgid(os.getegid()).gr_name
+        return user, group
+    except Exception:
+        return str(os.geteuid()), str(os.getegid())
