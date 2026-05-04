@@ -62,16 +62,21 @@ def _ensure_wifi(wifi_cfg: dict, *, reconnect_only: bool) -> None:
         logging.warning("Wi-Fi scan returned no visible SSIDs on %s", interface)
         return
 
+    attempted_connection = False
     for slot in slots:
         if slot.ssid not in visible_ssids:
             continue
+        attempted_connection = True
         if current_ssid == slot.ssid:
             logging.info("Wi-Fi already connected to preferred SSID %s", slot.ssid)
             return
         if _connect_slot(interface, slot):
             return
 
-    logging.warning("None of the configured Wi-Fi SSIDs are currently available on %s", interface)
+    if attempted_connection:
+        logging.warning("Configured Wi-Fi SSIDs are visible on %s, but connection attempts failed", interface)
+    else:
+        logging.warning("None of the configured Wi-Fi SSIDs are currently available on %s", interface)
 
 
 def _interface_name(wifi_cfg: dict) -> str:
