@@ -404,7 +404,7 @@ This controls peer-to-peer rover awareness.
 - `broker`
   Usually `blynk.cloud`, unless you use a regional endpoint.
 - `port`
-  Usually `8883` with TLS.
+  `8883` enables TLS for Blynk. `1883` uses plain MQTT for a local dashboard broker.
 - `username`
   Usually `device`.
 - `authToken`

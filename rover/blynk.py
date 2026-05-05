@@ -134,7 +134,7 @@ def blynk_loop(blynk_cfg: dict, stop_event) -> None:
     password = blynk_cfg["authToken"]
     keepalive = int(blynk_cfg.get("keepaliveSec", 45))
     publish_interval = int(blynk_cfg.get("publishIntervalSec", 2))
-    use_tls = bool(blynk_cfg.get("useTls", True))
+    use_tls = port == 8883
 
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -152,7 +152,7 @@ def blynk_loop(blynk_cfg: dict, stop_event) -> None:
 
     while not stop_event.is_set():
         try:
-            logging.info("Connecting to Blynk MQTT %s:%s", broker, port)
+            logging.info("Connecting to MQTT broker %s:%s (TLS=%s)", broker, port, "on" if use_tls else "off")
             client.connect(broker, port, keepalive=keepalive)
             client.loop_start()
 

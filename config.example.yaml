@@ -48,7 +48,7 @@ peerUdp:
 blynk:
   enabled: true
   broker: blynk.cloud
-  port: 8883
+  port: 8883 # 8883 enables TLS for Blynk, 1883 uses plain MQTT
   username: device
   authToken: your_blynk_device_auth_token
   templateId: TMPLxxxxxxx
