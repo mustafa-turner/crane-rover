@@ -173,8 +173,8 @@ def peer_udp_loop(peer_cfg: dict, stop_event) -> None:
     broadcast_host = str(peer_cfg.get("broadcastHost", "255.255.255.255"))
     extra_targets = get_extra_targets(peer_cfg)
     port = int(peer_cfg.get("port", 5005))
-    recv_poll_timeout = float(peer_cfg.get("recvPollTimeoutSec", 0.2))
-    broadcast_interval = float(peer_cfg.get("broadcastIntervalSec", 1.0))
+    recv_poll_timeout = float(peer_cfg.get("recvPollTimeoutSec", 0.02))
+    broadcast_interval = float(peer_cfg.get("broadcastIntervalSec", 0.1))
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

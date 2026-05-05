@@ -561,61 +561,35 @@ If the latest peer message for a rover is older than the built-in freshness thre
 
 That is the safety cutoff for peer tracking.
 
-## UDP Peer Message Contents
+## Published Telemetry Format
 
-Each rover broadcasts a JSON message containing:
+The rover publishes one compact JSON payload with local rover telemetry and the current nearest-rover safety data.
 
-- schema name
-- device ID
-- send timestamp
-- latitude
-- longitude
-- altitude
-- fix label
-- fix quality
-- estimated local accuracy
-
-Only the latest message per peer is kept.
-Older timestamps from the same peer are ignored.
-
-## Blynk Payload
-
-The rover publishes a compact payload that includes local telemetry plus nearest-peer information.
-
-### Local / battery fields
-
-- `rover_name`
-- `latitude`
-- `longitude`
-- `altitude_m`
-- `position`
-- `satellites`
-- `hdop`
-- `rtcm_age_sec`
-- `fix_mode`
-- `ntrip_status`
-- `battery_percent`
-- `battery_voltage_v`
-- `battery_current_a`
-- `battery_power_w`
-- `battery_status`
-- `battery_present`
-- `local_accuracy_m`
+| Rover 1 | Rover 2 |
+| --- | --- |
+| `rover_name` | `nearest_peer_id` |
+| `latitude` | `nearest_peer_distance_m` |
+| `longitude` | `nearest_peer_safe_distance_m` |
+| `altitude_m` | `nearest_peer_uncertainty_m` |
+| `position` | `nearest_peer_combined_accuracy_m` |
+| `satellites` | `nearest_peer_accuracy_m` |
+| `hdop` | `nearest_peer_fix_mode` |
+| `rtcm_age_sec` |  |
+| `fix_mode` |  |
+| `ntrip_status` |  |
+| `battery_percent` |  |
+| `battery_voltage_v` |  |
+| `battery_current_a` |  |
+| `battery_power_w` |  |
+| `battery_status` |  |
+| `battery_present` |  |
+| `local_accuracy_m` |  |
 
 `rover_name` is taken from `peerUdp.deviceId`.
 
-### Nearest-peer fields
+`nearest_peer_combined_accuracy_m` is kept as a compatibility key and has the same value as `nearest_peer_uncertainty_m`.
 
-- `nearest_peer_distance_m`
-- `nearest_peer_safe_distance_m`
-- `nearest_peer_uncertainty_m`
-- `nearest_peer_combined_accuracy_m`
-  Compatibility key, same value as `nearest_peer_uncertainty_m`
-- `nearest_peer_accuracy_m`
-- `nearest_peer_fix_mode`
-- `nearest_peer_id`
-
-### Suggested Blynk datastreams for nearest-peer safety
+### Suggested dashboard fields for safety view
 
 - `nearest_peer_distance_m` as `Double`
 - `nearest_peer_safe_distance_m` as `Double`
