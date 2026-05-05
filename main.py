@@ -1,5 +1,6 @@
 import logging
 import os
+import socket
 import sys
 import threading
 import time
@@ -31,6 +32,7 @@ def main() -> int:
     battery_cfg = config.get("battery", {})
     peer_cfg = config.get("peerUdp", {})
     wifi_cfg = config.get("wifi", {})
+    rover_name = str(peer_cfg.get("deviceId") or socket.gethostname())
 
     apply_preferred_wifi(wifi_cfg)
 
@@ -74,9 +76,11 @@ def main() -> int:
 
     blynk_thread = None
     if blynk_cfg.get("enabled", False):
+        blynk_runtime_cfg = dict(blynk_cfg)
+        blynk_runtime_cfg["roverName"] = rover_name
         blynk_thread = threading.Thread(
             target=blynk_loop,
-            args=(blynk_cfg, stop_event),
+            args=(blynk_runtime_cfg, stop_event),
             daemon=True,
         )
     wifi_thread = None

@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt
 from rover.state import FIX_MODE_ENUM, NTRIP_STATUS_ENUM, STATUS, STATUS_LOCK
 
 
-def get_blynk_payload() -> dict:
+def get_blynk_payload(rover_name: str = "") -> dict:
     with STATUS_LOCK:
         lat = STATUS.latitude
         lon = STATUS.longitude
@@ -54,6 +54,7 @@ def get_blynk_payload() -> dict:
         )
 
     payload = {
+        "rover_name": rover_name,
         "latitude": lat if lat is not None else 0.0,
         "longitude": lon if lon is not None else 0.0,
         "altitude_m": alt if alt is not None else 0.0,
@@ -157,7 +158,7 @@ def blynk_loop(blynk_cfg: dict, stop_event) -> None:
             client.loop_start()
 
             while not stop_event.is_set():
-                payload = get_blynk_payload()
+                payload = get_blynk_payload(str(blynk_cfg.get("roverName", "")))
                 client.publish("batch_ds", json.dumps(payload), qos=0, retain=False)
                 logging.debug("Published to Blynk: %s", payload)
                 stop_event.wait(publish_interval)

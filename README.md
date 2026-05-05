@@ -584,6 +584,7 @@ The rover publishes a compact payload that includes local telemetry plus nearest
 
 ### Local / battery fields
 
+- `rover_name`
 - `latitude`
 - `longitude`
 - `altitude_m`
@@ -600,6 +601,8 @@ The rover publishes a compact payload that includes local telemetry plus nearest
 - `battery_status`
 - `battery_present`
 - `local_accuracy_m`
+
+`rover_name` is taken from `peerUdp.deviceId`.
 
 ### Nearest-peer fields
 
