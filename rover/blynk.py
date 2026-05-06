@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt
 from rover.state import FIX_MODE_ENUM, NTRIP_STATUS_ENUM, STATUS, STATUS_LOCK
 
 
-def get_blynk_payload(rover_name: str = "") -> dict:
+def get_telemetry_payload(rover_name: str = "") -> dict:
     with STATUS_LOCK:
         lat = STATUS.latitude
         lon = STATUS.longitude
@@ -128,24 +128,43 @@ def on_blynk_message(client, userdata, msg):
         logging.warning("Set broker in config to your regional endpoint if needed.")
 
 
-def blynk_loop(blynk_cfg: dict, stop_event) -> None:
-    broker = blynk_cfg.get("broker", "blynk.cloud")
-    port = int(blynk_cfg.get("port", 8883))
-    username = blynk_cfg.get("username", "device")
-    password = blynk_cfg["authToken"]
-    keepalive = int(blynk_cfg.get("keepaliveSec", 45))
-    publish_interval = int(blynk_cfg.get("publishIntervalSec", 2))
-    use_tls = port == 8883
-
+def build_mqtt_client(username: str, password: str) -> mqtt.Client:
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
         client_id="",
         clean_session=True,
     )
-    client.username_pw_set(username, password)
-    client.user_data_set({"blynk_cfg": blynk_cfg})
-    client.on_connect = on_blynk_connect
-    client.on_message = on_blynk_message
+    if username or password:
+        client.username_pw_set(username, password)
+    return client
+
+
+def mqtt_publish_loop(
+    mqtt_cfg: dict,
+    stop_event,
+    *,
+    log_name: str,
+    topic: str,
+    username: str,
+    password: str,
+    on_connect=None,
+    on_message=None,
+    user_data: dict | None = None,
+) -> None:
+    broker = str(mqtt_cfg.get("broker", ""))
+    port = int(mqtt_cfg.get("port", 1883))
+    keepalive = int(mqtt_cfg.get("keepaliveSec", 45))
+    publish_interval = int(mqtt_cfg.get("publishIntervalSec", 2))
+    rover_name = str(mqtt_cfg.get("roverName", ""))
+    use_tls = port == 8883
+
+    client = build_mqtt_client(username, password)
+    if user_data is not None:
+        client.user_data_set(user_data)
+    if on_connect is not None:
+        client.on_connect = on_connect
+    if on_message is not None:
+        client.on_message = on_message
 
     if use_tls:
         client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
@@ -153,18 +172,24 @@ def blynk_loop(blynk_cfg: dict, stop_event) -> None:
 
     while not stop_event.is_set():
         try:
-            logging.info("Connecting to MQTT broker %s:%s (TLS=%s)", broker, port, "on" if use_tls else "off")
+            logging.info(
+                "Connecting %s MQTT to %s:%s (TLS=%s)",
+                log_name,
+                broker,
+                port,
+                "on" if use_tls else "off",
+            )
             client.connect(broker, port, keepalive=keepalive)
             client.loop_start()
 
             while not stop_event.is_set():
-                payload = get_blynk_payload(str(blynk_cfg.get("roverName", "")))
-                client.publish("batch_ds", json.dumps(payload), qos=0, retain=False)
-                logging.debug("Published to Blynk: %s", payload)
+                payload = get_telemetry_payload(rover_name)
+                client.publish(topic, json.dumps(payload), qos=0, retain=False)
+                logging.debug("Published to %s MQTT topic %s: %s", log_name, topic, payload)
                 stop_event.wait(publish_interval)
             break
         except Exception as exc:
-            logging.error("Blynk MQTT error: %s", exc)
+            logging.error("%s MQTT error: %s", log_name, exc)
             stop_event.wait(5)
         finally:
             try:
@@ -175,3 +200,28 @@ def blynk_loop(blynk_cfg: dict, stop_event) -> None:
                 client.disconnect()
             except Exception:
                 pass
+
+
+def blynk_loop(blynk_cfg: dict, stop_event) -> None:
+    mqtt_publish_loop(
+        blynk_cfg,
+        stop_event,
+        log_name="Blynk",
+        topic="batch_ds",
+        username=str(blynk_cfg.get("username", "device")),
+        password=str(blynk_cfg["authToken"]),
+        on_connect=on_blynk_connect,
+        on_message=on_blynk_message,
+        user_data={"blynk_cfg": blynk_cfg},
+    )
+
+
+def mqtt_loop(mqtt_cfg: dict, stop_event) -> None:
+    mqtt_publish_loop(
+        mqtt_cfg,
+        stop_event,
+        log_name="Generic",
+        topic=str(mqtt_cfg.get("topic", "batch_ds")),
+        username=str(mqtt_cfg.get("username", "")),
+        password=str(mqtt_cfg.get("password", "")),
+    )

@@ -26,6 +26,7 @@ SECTION_ORDER = [
     "battery",
     "peerUdp",
     "blynk",
+    "mqtt",
 ]
 
 CONSOLE_ENABLED = True
@@ -43,6 +44,7 @@ SECTION_HELP = {
     "battery": "Battery monitoring configuration.",
     "peerUdp": "Peer rover UDP sharing and optional ZeroTier unicast targets.",
     "blynk": "Blynk MQTT publishing settings.",
+    "mqtt": "Second MQTT publisher settings for a non-Blynk broker.",
 }
 
 FIELD_HELP = {
@@ -76,6 +78,7 @@ FIELD_HELP = {
     "peerUdp.deviceId": "Unique rover identifier shared with peers.",
     "peerUdp.port": "UDP port used by all rovers.",
     "peerUdp.broadcastHost": "IPv4 broadcast address for local-LAN peer discovery, usually 255.255.255.255.",
+    "peerUdp.bufferDistanceM": "Straight-line antenna-to-edge buffer distance in meters, subtracted from peer separation.",
     "peerUdp.extraTargets": "Optional comma-separated list of unicast peer IPs, usually ZeroTier addresses.",
     "blynk.enabled": "Enable Blynk MQTT publishing.",
     "blynk.broker": "Blynk broker hostname.",
@@ -84,6 +87,12 @@ FIELD_HELP = {
     "blynk.authToken": "Blynk device auth token.",
     "blynk.templateId": "Blynk template ID.",
     "blynk.firmwareVersion": "Firmware version string reported to Blynk.",
+    "mqtt.enabled": "Enable the second MQTT publisher.",
+    "mqtt.broker": "Second MQTT broker hostname or IP address.",
+    "mqtt.port": "Second MQTT broker port. Port 8883 enables TLS automatically.",
+    "mqtt.username": "Optional MQTT username for the second broker.",
+    "mqtt.password": "Optional MQTT password for the second broker.",
+    "mqtt.topic": "Topic used for the second MQTT publish stream.",
 }
 
 FIELD_OPTIONS = {
@@ -95,6 +104,7 @@ FIELD_OPTIONS = {
     "battery.driver": "Options: waveshare-ups-hat-c, sysfs",
     "peerUdp.enabled": "Options: true, false",
     "blynk.enabled": "Options: true, false",
+    "mqtt.enabled": "Options: true, false",
 }
 
 

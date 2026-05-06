@@ -2,7 +2,7 @@
 
 Python rover application for Raspberry Pi based crane positioning nodes.
 
-This project is built around a GNSS receiver, an NTRIP correction link, an optional Waveshare UPS HAT (C), UDP peer broadcasting between rovers, and Blynk MQTT publishing.
+This project is built around a GNSS receiver, an NTRIP correction link, an optional Waveshare UPS HAT (C), UDP peer broadcasting between rovers, and MQTT publishing to Blynk plus an optional second broker.
 
 ## What It Does
 
@@ -16,6 +16,7 @@ Each rover can:
 - compute distance to the nearest peer rover
 - compute a conservative safety distance by subtracting uncertainty from raw distance
 - publish local rover telemetry and nearest-peer safety data to Blynk
+- optionally publish the same telemetry to a second MQTT broker at the same time
 - print a live operator status view in the terminal
 - expose a simple keyboard-driven settings menu when running on an attached terminal
 
@@ -36,7 +37,7 @@ Each rover can:
 - `rover/peer_udp.py`
   Broadcasts rover state to peers and listens for peer messages.
 - `rover/blynk.py`
-  Publishes rover telemetry to Blynk over MQTT.
+  Publishes rover telemetry to Blynk and an optional second MQTT broker.
 - `rover/state.py`
   Shared in-memory state used by all threads.
 - `rover/config.py`
@@ -63,7 +64,7 @@ At runtime, the normal flow is:
 7. Broadcast local rover state to peers over UDP.
 8. Receive peer state and calculate nearest-peer distance and safety margin.
 9. Print everything to the terminal.
-10. Optionally publish a compact telemetry payload to Blynk.
+10. Optionally publish a compact telemetry payload to Blynk and an optional second MQTT broker.
 11. If running on a real TTY, enter the settings menu when any key is pressed.
 
 ## Project Files
@@ -91,7 +92,7 @@ Typical environment:
 - GNSS receiver connected by UART/serial
 - NetworkManager with `nmcli` available if Wi-Fi auto-selection is enabled
 - NTRIP caster credentials
-- network access for NTRIP and optionally Blynk
+- network access for NTRIP and optionally MQTT brokers such as Blynk
 - optional Waveshare UPS HAT (C)
 - optional multiple rovers on the same network for UDP peer ranging
 
@@ -308,6 +309,7 @@ peerUdp:
   deviceId: rover-01
   port: 5005
   broadcastHost: 255.255.255.255
+  bufferDistanceM: 0.0
   extraTargets: []
 
 blynk:
@@ -318,6 +320,14 @@ blynk:
   authToken: your_blynk_device_auth_token
   templateId: TMPLxxxxxxx
   firmwareVersion: 0.1.0
+
+mqtt:
+  enabled: false
+  broker: 192.168.1.50
+  port: 1883
+  username: ""
+  password: ""
+  topic: batch_ds
 ```
 
 ## Config Reference
@@ -394,6 +404,8 @@ This controls peer-to-peer rover awareness.
   UDP port shared by all rovers.
 - `broadcastHost`
   Usually `255.255.255.255`.
+- `bufferDistanceM`
+  Straight-line antenna-to-edge buffer distance in meters for this rover. The app subtracts this rover's value plus the peer rover's value from the center-to-center GNSS separation.
 - `extraTargets`
   Optional list of unicast peer IP addresses. This is typically used for ZeroTier peer addresses.
 
@@ -413,6 +425,21 @@ This controls peer-to-peer rover awareness.
   Blynk template ID.
 - `firmwareVersion`
   Version string reported to Blynk.
+
+### `mqtt`
+
+- `enabled`
+  Enables a second MQTT publisher in parallel with Blynk.
+- `broker`
+  Hostname or IP address for the second MQTT broker.
+- `port`
+  Broker port. `8883` enables TLS automatically, matching the Blynk behavior. `1883` uses plain MQTT.
+- `username`
+  Optional MQTT username.
+- `password`
+  Optional MQTT password.
+- `topic`
+  Topic used for the second MQTT payload stream. The payload matches the Blynk publish payload.
 
 ## Running the Rover
 
@@ -511,7 +538,7 @@ Peer lines include:
 - `safe`
   Conservative safety distance
 - `raw`
-  Raw latitude/longitude distance
+  Buffer-adjusted straight-line distance after subtracting both rover buffer distances
 - `uncertainty`
   Relative distance uncertainty
 - `acc`
@@ -523,9 +550,21 @@ Peer lines include:
 
 ### Raw distance
 
-Distance is calculated from latitude and longitude only.
+Center-to-center distance is calculated from latitude and longitude only.
 
 Altitude is broadcast for reference, but it is not used in the distance calculation.
+
+### Buffer distance
+
+Each rover can advertise its own `peerUdp.bufferDistanceM`.
+
+The app subtracts both rover buffer distances from the center-to-center GNSS separation:
+
+```text
+raw_distance = max(0, center_distance - local_buffer_distance - peer_buffer_distance)
+```
+
+This lets you treat the antenna location as a simple straight-line inset from the crane edge without introducing heading or X/Y offsets.
 
 ### Accuracy
 
@@ -553,7 +592,7 @@ The conservative safety distance is:
 safe_distance = max(0, raw_distance - uncertainty)
 ```
 
-This means the system assumes the cranes may be closer than the raw GNSS separation suggests.
+This means the system assumes the cranes may be closer than the buffer-adjusted GNSS separation suggests.
 
 ### Stale message rule
 
@@ -564,6 +603,8 @@ That is the safety cutoff for peer tracking.
 ## Published Telemetry Format
 
 The rover publishes one compact JSON payload with local rover telemetry and the current nearest-rover safety data.
+
+That same payload can be sent to Blynk and, if enabled, to a second MQTT broker at the same time.
 
 | Rover 1 | Rover 2 |
 | --- | --- |
@@ -682,6 +723,16 @@ Check:
 - correct broker endpoint
 - outbound MQTT/TLS connectivity
 
+### Second MQTT broker is not updating
+
+Check:
+
+- `mqtt.enabled: true`
+- `mqtt.broker` and `mqtt.port`
+- `mqtt.topic`
+- optional `mqtt.username` and `mqtt.password`
+- outbound MQTT/TLS connectivity
+
 If needed, raise logging level to debug:
 
 ```yaml
@@ -693,7 +744,7 @@ logging:
 
 - The code uses threads, not `asyncio`.
 - Shared state is protected by locks in `rover/state.py`.
-- The nearest-peer logic is intentionally compact for operator use and Blynk dashboards.
+- The nearest-peer logic is intentionally compact for operator use and MQTT dashboards.
 - The system currently computes 2D horizontal distance only.
 
 ## Suggested `.gitignore`

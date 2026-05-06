@@ -6,7 +6,7 @@ import threading
 import time
 
 from rover.battery import battery_monitor_loop
-from rover.blynk import blynk_loop
+from rover.blynk import blynk_loop, mqtt_loop
 from rover.config import load_config, setup_logging
 from rover.console import SerialConsoleManager
 from rover.gnss import nmea_reader_loop, open_serial
@@ -29,6 +29,7 @@ def main() -> int:
     serial_cfg = config["serial"]
     status_cfg = config.get("status", {})
     blynk_cfg = config.get("blynk", {})
+    mqtt_cfg = config.get("mqtt", {})
     battery_cfg = config.get("battery", {})
     peer_cfg = config.get("peerUdp", {})
     wifi_cfg = config.get("wifi", {})
@@ -90,6 +91,15 @@ def main() -> int:
             args=(wifi_cfg, stop_event),
             daemon=True,
         )
+    mqtt_thread = None
+    if mqtt_cfg.get("enabled", False):
+        mqtt_runtime_cfg = dict(mqtt_cfg)
+        mqtt_runtime_cfg["roverName"] = rover_name
+        mqtt_thread = threading.Thread(
+            target=mqtt_loop,
+            args=(mqtt_runtime_cfg, stop_event),
+            daemon=True,
+        )
 
     nmea_thread.start()
     ntrip_thread.start()
@@ -103,6 +113,8 @@ def main() -> int:
         blynk_thread.start()
     if wifi_thread is not None:
         wifi_thread.start()
+    if mqtt_thread is not None:
+        mqtt_thread.start()
 
     logging.info("Stage 1 rover started.")
 
@@ -131,6 +143,8 @@ def main() -> int:
             blynk_thread.join(timeout=2)
         if wifi_thread is not None:
             wifi_thread.join(timeout=2)
+        if mqtt_thread is not None:
+            mqtt_thread.join(timeout=2)
         ser.close()
 
     if restart_requested:

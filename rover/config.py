@@ -51,6 +51,7 @@ PUBLIC_CONFIG_TEMPLATE = {
         "deviceId": "rover-01",
         "port": 5005,
         "broadcastHost": "255.255.255.255",
+        "bufferDistanceM": 0.0,
         "extraTargets": [],
     },
     "blynk": {
@@ -61,6 +62,14 @@ PUBLIC_CONFIG_TEMPLATE = {
         "authToken": "",
         "templateId": "",
         "firmwareVersion": "0.1.0",
+    },
+    "mqtt": {
+        "enabled": False,
+        "broker": "",
+        "port": 1883,
+        "username": "",
+        "password": "",
+        "topic": "batch_ds",
     },
 }
 

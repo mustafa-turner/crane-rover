@@ -41,6 +41,10 @@ peerUdp:
   deviceId: rover-01
   port: 5005
   broadcastHost: 255.255.255.255
+  # Straight-line antenna-to-edge buffer distance in meters.
+  # Each rover advertises its own value, and both values are
+  # subtracted from the peer separation before safety margin.
+  bufferDistanceM: 0.0
   # Optional extra unicast targets. This is usually where you put
   # ZeroTier peer IP addresses if you want peer updates off-LAN too.
   extraTargets: []
@@ -53,3 +57,11 @@ blynk:
   authToken: your_blynk_device_auth_token
   templateId: TMPLxxxxxxx
   firmwareVersion: 0.1.0
+
+mqtt:
+  enabled: false
+  broker: 192.168.1.50
+  port: 1883 # 8883 enables TLS automatically, matching Blynk behavior
+  username: ""
+  password: ""
+  topic: batch_ds

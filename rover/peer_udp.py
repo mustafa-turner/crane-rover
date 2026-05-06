@@ -52,6 +52,16 @@ def conservative_distance_m(distance_m: float | None, combined_accuracy_m_value:
     return max(0.0, distance_m - combined_accuracy_m_value)
 
 
+def buffered_distance_m(
+    center_distance_m: float | None,
+    local_buffer_distance_m: float,
+    peer_buffer_distance_m: float,
+) -> float | None:
+    if center_distance_m is None:
+        return None
+    return max(0.0, center_distance_m - local_buffer_distance_m - peer_buffer_distance_m)
+
+
 def haversine_distance_m(
     lat1: float,
     lon1: float,
@@ -87,6 +97,7 @@ def build_peer_payload(device_id: str, peer_cfg: dict) -> dict:
         fix_label=local["fix_label"],
     )
     update_local_horizontal_accuracy(accuracy_m)
+    buffer_distance_m = float(peer_cfg.get("bufferDistanceM", 0.0))
 
     return {
         "schema": PEER_SCHEMA,
@@ -98,6 +109,7 @@ def build_peer_payload(device_id: str, peer_cfg: dict) -> dict:
         "fix_label": local["fix_label"],
         "fix_quality": local["fix_quality"],
         "accuracy_m": accuracy_m,
+        "buffer_distance_m": buffer_distance_m,
     }
 
 
@@ -138,14 +150,18 @@ def build_peer_status_from_message(
     else:
         peer_accuracy_m = float(peer_accuracy_m)
 
-    distance_m = None
+    local_buffer_distance_m = float(peer_cfg.get("bufferDistanceM", 0.0))
+    peer_buffer_distance_m = float(payload.get("buffer_distance_m", 0.0))
+
+    center_distance_m = None
     if None not in (local["latitude"], local["longitude"], payload.get("latitude"), payload.get("longitude")):
-        distance_m = haversine_distance_m(
+        center_distance_m = haversine_distance_m(
             float(local["latitude"]),
             float(local["longitude"]),
             float(payload["latitude"]),
             float(payload["longitude"]),
         )
+    distance_m = buffered_distance_m(center_distance_m, local_buffer_distance_m, peer_buffer_distance_m)
 
     combined_accuracy = combined_accuracy_m(local_accuracy_m, peer_accuracy_m)
 
