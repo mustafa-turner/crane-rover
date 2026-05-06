@@ -154,7 +154,7 @@ def mqtt_publish_loop(
     broker = str(mqtt_cfg.get("broker", ""))
     port = int(mqtt_cfg.get("port", 1883))
     keepalive = int(mqtt_cfg.get("keepaliveSec", 45))
-    publish_interval = int(mqtt_cfg.get("publishIntervalSec", 2))
+    publish_interval = float(mqtt_cfg.get("publishIntervalSec", 1.0))
     rover_name = str(mqtt_cfg.get("roverName", ""))
     use_tls = port == 8883
 

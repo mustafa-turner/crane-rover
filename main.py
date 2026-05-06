@@ -12,7 +12,7 @@ from rover.console import SerialConsoleManager
 from rover.gnss import nmea_reader_loop, open_serial
 from rover.ntrip import ntrip_loop
 from rover.peer_udp import peer_udp_loop
-from rover.status import STATUS_INTERVAL_SEC, status_printer_loop
+from rover.status import DEFAULT_STATUS_INTERVAL_SEC, status_printer_loop
 from rover.wifi import apply_preferred_wifi, wifi_monitor_loop
 
 
@@ -55,9 +55,10 @@ def main() -> int:
     )
     printer_thread = None
     if status_cfg.get("enabled", True):
+        status_interval_sec = float(status_cfg.get("intervalSec", DEFAULT_STATUS_INTERVAL_SEC))
         printer_thread = threading.Thread(
             target=status_printer_loop,
-            args=(STATUS_INTERVAL_SEC, stop_event, console, status_cfg.get("mode", "normal")),
+            args=(status_interval_sec, stop_event, console, status_cfg.get("mode", "normal")),
             daemon=True,
         )
     battery_thread = None

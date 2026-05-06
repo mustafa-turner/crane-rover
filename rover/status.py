@@ -6,10 +6,10 @@ import time
 from rover.state import STATUS, STATUS_LOCK, fmt, fmt_int, fmt_percent
 
 
-STATUS_INTERVAL_SEC = 2
+DEFAULT_STATUS_INTERVAL_SEC = 0.5
 
 
-def status_printer_loop(interval_sec: int, stop_event, console=None, mode: str = "normal") -> None:
+def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str = "normal") -> None:
     while not stop_event.is_set():
         if console is not None and console.should_pause_live_output():
             stop_event.wait(0.2)

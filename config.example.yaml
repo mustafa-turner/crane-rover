@@ -27,6 +27,7 @@ logging:
 status:
   enabled: true
   mode: normal
+  intervalSec: 0.5
 
 battery:
   enabled: true
@@ -57,6 +58,7 @@ blynk:
   authToken: your_blynk_device_auth_token
   templateId: TMPLxxxxxxx
   firmwareVersion: 0.1.0
+  publishIntervalSec: 1.0
 
 mqtt:
   enabled: false
@@ -65,3 +67,4 @@ mqtt:
   username: ""
   password: ""
   topic: batch_ds
+  publishIntervalSec: 0.1

@@ -37,6 +37,7 @@ PUBLIC_CONFIG_TEMPLATE = {
     "status": {
         "enabled": True,
         "mode": "normal",
+        "intervalSec": 0.5,
     },
     "battery": {
         "enabled": True,
@@ -62,6 +63,7 @@ PUBLIC_CONFIG_TEMPLATE = {
         "authToken": "",
         "templateId": "",
         "firmwareVersion": "0.1.0",
+        "publishIntervalSec": 1.0,
     },
     "mqtt": {
         "enabled": False,
@@ -70,6 +72,7 @@ PUBLIC_CONFIG_TEMPLATE = {
         "username": "",
         "password": "",
         "topic": "batch_ds",
+        "publishIntervalSec": 0.1,
     },
 }
 

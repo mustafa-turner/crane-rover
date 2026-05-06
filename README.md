@@ -295,6 +295,7 @@ logging:
 status:
   enabled: true
   mode: normal
+  intervalSec: 0.5
 
 battery:
   enabled: true
@@ -320,6 +321,7 @@ blynk:
   authToken: your_blynk_device_auth_token
   templateId: TMPLxxxxxxx
   firmwareVersion: 0.1.0
+  publishIntervalSec: 1.0
 
 mqtt:
   enabled: false
@@ -328,6 +330,7 @@ mqtt:
   username: ""
   password: ""
   topic: batch_ds
+  publishIntervalSec: 0.1
 ```
 
 ## Config Reference
@@ -374,6 +377,8 @@ mqtt:
   Whether the terminal status printer thread runs.
 - `mode`
   `normal` for operator view or `debug` for full diagnostics.
+- `intervalSec`
+  Seconds between status refreshes. Decimal values are allowed. Very low values can flood the terminal and serial console.
 
 ### `battery`
 
@@ -425,6 +430,8 @@ This controls peer-to-peer rover awareness.
   Blynk template ID.
 - `firmwareVersion`
   Version string reported to Blynk.
+- `publishIntervalSec`
+  Seconds between publishes. Decimal values are allowed. The default is `1.0`.
 
 ### `mqtt`
 
@@ -440,6 +447,8 @@ This controls peer-to-peer rover awareness.
   Optional MQTT password.
 - `topic`
   Topic used for the second MQTT payload stream. The payload matches the Blynk publish payload.
+- `publishIntervalSec`
+  Seconds between publishes. Decimal values are allowed. The default is `0.1` for faster local dashboard updates.
 
 ## Running the Rover
 
@@ -731,7 +740,17 @@ Check:
 - `mqtt.broker` and `mqtt.port`
 - `mqtt.topic`
 - optional `mqtt.username` and `mqtt.password`
+- `mqtt.publishIntervalSec`
 - outbound MQTT/TLS connectivity
+
+### Status output is too fast or too slow
+
+Check:
+
+- `status.intervalSec`
+- lower values increase stdout and serial console traffic significantly
+- `0.5` is a reasonable fast default
+- `0.1` is possible, but it will generate a very noisy full-screen status stream
 
 If needed, raise logging level to debug:
 

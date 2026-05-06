@@ -68,6 +68,7 @@ FIELD_HELP = {
     "logging.level": "Logging verbosity.",
     "status.enabled": "Enable the live rover status screen.",
     "status.mode": "Status screen detail level.",
+    "status.intervalSec": "Seconds between status screen refreshes. Very low values can flood the console.",
     "battery.enabled": "Enable battery monitoring.",
     "battery.driver": "Battery driver to use.",
     "battery.i2cBus": "I2C bus number for the battery monitor, usually 1.",
@@ -87,12 +88,14 @@ FIELD_HELP = {
     "blynk.authToken": "Blynk device auth token.",
     "blynk.templateId": "Blynk template ID.",
     "blynk.firmwareVersion": "Firmware version string reported to Blynk.",
+    "blynk.publishIntervalSec": "Seconds between Blynk publishes. Supports decimals.",
     "mqtt.enabled": "Enable the second MQTT publisher.",
     "mqtt.broker": "Second MQTT broker hostname or IP address.",
     "mqtt.port": "Second MQTT broker port. Port 8883 enables TLS automatically.",
     "mqtt.username": "Optional MQTT username for the second broker.",
     "mqtt.password": "Optional MQTT password for the second broker.",
     "mqtt.topic": "Topic used for the second MQTT publish stream.",
+    "mqtt.publishIntervalSec": "Seconds between second-broker publishes. Supports decimals.",
 }
 
 FIELD_OPTIONS = {
