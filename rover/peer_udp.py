@@ -19,7 +19,7 @@ from rover.state import (
 DEFAULT_FIX_ACCURACY_M = {
     "UNKNOWN": None,
     "NO FIX": None,
-    "GNSS FIX": 5.0,
+    "GNSS FIX": 10.0,
     "DGPS": 1.5,
     "RTK FLOAT": 0.5,
     "RTK FIXED": 0.02,
