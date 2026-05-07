@@ -20,8 +20,8 @@ DEFAULT_FIX_ACCURACY_M = {
     "UNKNOWN": None,
     "NO FIX": None,
     "GNSS FIX": 10.0,
-    "DGPS": 1.5,
-    "RTK FLOAT": 0.5,
+    "DGPS": 2.0,
+    "RTK FLOAT": 1.0,
     "RTK FIXED": 0.02,
     "DEAD RECKONING": 10.0,
 }
