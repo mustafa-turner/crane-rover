@@ -27,6 +27,7 @@ SECTION_ORDER = [
     "peerUdp",
     "blynk",
     "mqtt",
+    "web",
 ]
 
 CONSOLE_ENABLED = True
@@ -45,6 +46,7 @@ SECTION_HELP = {
     "peerUdp": "Peer rover UDP sharing and optional ZeroTier unicast targets.",
     "blynk": "Blynk MQTT publishing settings.",
     "mqtt": "Second MQTT publisher settings for a non-Blynk broker.",
+    "web": "Lightweight operator web viewer for nearest-peer safety distance.",
 }
 
 FIELD_HELP = {
@@ -96,6 +98,10 @@ FIELD_HELP = {
     "mqtt.password": "Optional MQTT password for the second broker.",
     "mqtt.topic": "Topic used for the second MQTT publish stream.",
     "mqtt.publishIntervalSec": "Seconds between second-broker publishes. Supports decimals.",
+    "web.enabled": "Enable the lightweight operator web viewer.",
+    "web.host": "Bind address for the web viewer, usually 0.0.0.0.",
+    "web.port": "HTTP port used by the web viewer, usually 8080.",
+    "web.safeDistanceThresholdM": "Distance threshold in meters for SAFE versus DANGER on the web viewer.",
 }
 
 FIELD_OPTIONS = {
@@ -108,6 +114,7 @@ FIELD_OPTIONS = {
     "peerUdp.enabled": "Options: true, false",
     "blynk.enabled": "Options: true, false",
     "mqtt.enabled": "Options: true, false",
+    "web.enabled": "Options: true, false",
 }
 
 

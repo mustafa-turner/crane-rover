@@ -15,6 +15,7 @@ Each rover can:
 - broadcast its latest timestamped position and accuracy to nearby rover devices over UDP
 - compute distance to the nearest peer rover
 - compute a conservative safety distance by subtracting uncertainty from raw distance
+- optionally expose a lightweight safety web viewer for operators
 - publish local rover telemetry and nearest-peer safety data to Blynk
 - optionally publish the same telemetry to a second MQTT broker at the same time
 - print a live operator status view in the terminal
@@ -38,6 +39,8 @@ Each rover can:
   Broadcasts rover state to peers and listens for peer messages.
 - `rover/blynk.py`
   Publishes rover telemetry to Blynk and an optional second MQTT broker.
+- `rover/web.py`
+  Serves a lightweight operator viewer for nearest-peer safety state.
 - `rover/state.py`
   Shared in-memory state used by all threads.
 - `rover/config.py`
@@ -64,8 +67,9 @@ At runtime, the normal flow is:
 7. Broadcast local rover state to peers over UDP.
 8. Receive peer state and calculate nearest-peer distance and safety margin.
 9. Print everything to the terminal.
-10. Optionally publish a compact telemetry payload to Blynk and an optional second MQTT broker.
-11. If running on a real TTY, enter the settings menu when any key is pressed.
+10. Optionally serve a simple operator web page for safety glanceability.
+11. Optionally publish a compact telemetry payload to Blynk and an optional second MQTT broker.
+12. If running on a real TTY, enter the settings menu when any key is pressed.
 
 ## Project Files
 
@@ -78,6 +82,7 @@ At runtime, the normal flow is:
 - `rover/peer_udp.py`
 - `rover/blynk.py`
 - `rover/status.py`
+- `rover/web.py`
 - `requirements.txt`
 - `config.example.yaml`
 - `config.yaml`
@@ -331,6 +336,12 @@ mqtt:
   password: ""
   topic: batch_ds
   publishIntervalSec: 0.1
+
+web:
+  enabled: false
+  host: 0.0.0.0
+  port: 8080
+  safeDistanceThresholdM: 25.0
 ```
 
 ## Config Reference
@@ -432,6 +443,17 @@ This controls peer-to-peer rover awareness.
   Version string reported to Blynk.
 - `publishIntervalSec`
   Seconds between publishes. Decimal values are allowed. The default is `1.0`.
+
+### `web`
+
+- `enabled`
+  Enables the lightweight operator web viewer.
+- `host`
+  Bind address for the viewer, usually `0.0.0.0`.
+- `port`
+  HTTP port for the viewer, default `8080`.
+- `safeDistanceThresholdM`
+  Distance threshold used by the viewer. Values above it display `SAFE` in green, and values at or below it display `DANGER` in red.
 
 ### `mqtt`
 

@@ -74,6 +74,12 @@ PUBLIC_CONFIG_TEMPLATE = {
         "topic": "batch_ds",
         "publishIntervalSec": 0.1,
     },
+    "web": {
+        "enabled": False,
+        "host": "0.0.0.0",
+        "port": 8080,
+        "safeDistanceThresholdM": 25.0,
+    },
 }
 
 

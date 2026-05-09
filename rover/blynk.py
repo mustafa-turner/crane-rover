@@ -4,36 +4,36 @@ import json
 import logging
 import ssl
 import time
+from dataclasses import dataclass
 
 import paho.mqtt.client as mqtt
 
 from rover.state import FIX_MODE_ENUM, NTRIP_STATUS_ENUM, STATUS, STATUS_LOCK
 
 
-def get_telemetry_payload(rover_name: str = "") -> dict:
+@dataclass
+class SafetyViewSnapshot:
+    rover_name: str
+    rover_fix_label: str
+    rover_ntrip_connected: bool
+    nearest_peer_id: str
+    nearest_peer_fix_label: str
+    safe_distance_m: float | None
+    raw_distance_m: float | None
+    nearest_peer_accuracy_m: float | None
+    nearest_peer_uncertainty_m: float | None
+    threshold_m: float
+    state: str
+    updated_at: float
+
+
+def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) -> SafetyViewSnapshot:
     with STATUS_LOCK:
-        lat = STATUS.latitude
-        lon = STATUS.longitude
-        alt = STATUS.altitude_m
-        sats = STATUS.satellites
-        hdop = STATUS.hdop
         fix_label = STATUS.fix_label
         ntrip_connected = STATUS.ntrip_connected
-        last_rtcm_received_at = STATUS.last_rtcm_received_at
-        battery_percent = STATUS.battery_percent
-        battery_voltage_v = STATUS.battery_voltage_v
-        battery_current_a = STATUS.battery_current_a
-        battery_power_w = STATUS.battery_power_w
-        battery_status = STATUS.battery_status
-        battery_present = STATUS.battery_present
-        local_horizontal_accuracy_m = STATUS.local_horizontal_accuracy_m
         peers = list(STATUS.peers.values())
 
     now = time.time()
-    rtcm_age_sec = 999.0
-    if last_rtcm_received_at is not None:
-        rtcm_age_sec = max(0.0, now - last_rtcm_received_at)
-
     fresh_peers = []
     for peer in peers:
         if peer.received_at is None:
@@ -53,6 +53,65 @@ def get_telemetry_payload(rover_name: str = "") -> dict:
             ),
         )
 
+    safe_distance_m = None
+    raw_distance_m = None
+    nearest_peer_accuracy_m = None
+    nearest_peer_uncertainty_m = None
+    nearest_peer_id = ""
+    nearest_peer_fix_label = "UNKNOWN"
+    state = "unknown"
+
+    if nearest_peer is not None:
+        safe_distance_m = nearest_peer.conservative_distance_m
+        raw_distance_m = nearest_peer.distance_m
+        nearest_peer_accuracy_m = nearest_peer.accuracy_m
+        nearest_peer_uncertainty_m = nearest_peer.combined_accuracy_m
+        nearest_peer_id = nearest_peer.device_id
+        nearest_peer_fix_label = nearest_peer.fix_label
+        if safe_distance_m is not None:
+            state = "safe" if safe_distance_m > threshold_m else "danger"
+
+    return SafetyViewSnapshot(
+        rover_name=rover_name,
+        rover_fix_label=fix_label,
+        rover_ntrip_connected=ntrip_connected,
+        nearest_peer_id=nearest_peer_id,
+        nearest_peer_fix_label=nearest_peer_fix_label,
+        safe_distance_m=safe_distance_m,
+        raw_distance_m=raw_distance_m,
+        nearest_peer_accuracy_m=nearest_peer_accuracy_m,
+        nearest_peer_uncertainty_m=nearest_peer_uncertainty_m,
+        threshold_m=threshold_m,
+        state=state,
+        updated_at=now,
+    )
+
+
+def get_telemetry_payload(rover_name: str = "") -> dict:
+    with STATUS_LOCK:
+        lat = STATUS.latitude
+        lon = STATUS.longitude
+        alt = STATUS.altitude_m
+        sats = STATUS.satellites
+        hdop = STATUS.hdop
+        fix_label = STATUS.fix_label
+        ntrip_connected = STATUS.ntrip_connected
+        last_rtcm_received_at = STATUS.last_rtcm_received_at
+        battery_percent = STATUS.battery_percent
+        battery_voltage_v = STATUS.battery_voltage_v
+        battery_current_a = STATUS.battery_current_a
+        battery_power_w = STATUS.battery_power_w
+        battery_status = STATUS.battery_status
+        battery_present = STATUS.battery_present
+        local_horizontal_accuracy_m = STATUS.local_horizontal_accuracy_m
+
+    now = time.time()
+    rtcm_age_sec = 999.0
+    if last_rtcm_received_at is not None:
+        rtcm_age_sec = max(0.0, now - last_rtcm_received_at)
+
+    safety = get_safety_view_snapshot(rover_name)
+
     payload = {
         "rover_name": rover_name,
         "latitude": lat if lat is not None else 0.0,
@@ -70,29 +129,21 @@ def get_telemetry_payload(rover_name: str = "") -> dict:
         "battery_status": battery_status,
         "battery_present": 1 if battery_present is True else 0 if battery_present is False else -1,
         "local_accuracy_m": round(local_horizontal_accuracy_m, 3) if local_horizontal_accuracy_m is not None else -1.0,
-        "nearest_peer_distance_m": round(nearest_peer.distance_m, 3) if nearest_peer and nearest_peer.distance_m is not None else -1.0,
+        "nearest_peer_distance_m": round(safety.raw_distance_m, 3) if safety.raw_distance_m is not None else -1.0,
         "nearest_peer_safe_distance_m": (
-            round(nearest_peer.conservative_distance_m, 3)
-            if nearest_peer and nearest_peer.conservative_distance_m is not None
-            else -1.0
+            round(safety.safe_distance_m, 3) if safety.safe_distance_m is not None else -1.0
         ),
         "nearest_peer_uncertainty_m": (
-            round(nearest_peer.combined_accuracy_m, 3)
-            if nearest_peer and nearest_peer.combined_accuracy_m is not None
-            else -1.0
+            round(safety.nearest_peer_uncertainty_m, 3) if safety.nearest_peer_uncertainty_m is not None else -1.0
         ),
         "nearest_peer_combined_accuracy_m": (
-            round(nearest_peer.combined_accuracy_m, 3)
-            if nearest_peer and nearest_peer.combined_accuracy_m is not None
-            else -1.0
+            round(safety.nearest_peer_uncertainty_m, 3) if safety.nearest_peer_uncertainty_m is not None else -1.0
         ),
         "nearest_peer_accuracy_m": (
-            round(nearest_peer.accuracy_m, 3)
-            if nearest_peer and nearest_peer.accuracy_m is not None
-            else -1.0
+            round(safety.nearest_peer_accuracy_m, 3) if safety.nearest_peer_accuracy_m is not None else -1.0
         ),
-        "nearest_peer_fix_mode": FIX_MODE_ENUM.get(nearest_peer.fix_label, 0) if nearest_peer else 0,
-        "nearest_peer_id": nearest_peer.device_id if nearest_peer else "",
+        "nearest_peer_fix_mode": FIX_MODE_ENUM.get(safety.nearest_peer_fix_label, 0),
+        "nearest_peer_id": safety.nearest_peer_id,
     }
     if lat is not None and lon is not None:
         payload["position"] = [lon, lat]

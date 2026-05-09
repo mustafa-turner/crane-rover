@@ -13,6 +13,7 @@ from rover.gnss import nmea_reader_loop, open_serial
 from rover.ntrip import ntrip_loop
 from rover.peer_udp import peer_udp_loop
 from rover.status import DEFAULT_STATUS_INTERVAL_SEC, status_printer_loop
+from rover.web import web_viewer_loop
 from rover.wifi import apply_preferred_wifi, wifi_monitor_loop
 
 
@@ -33,6 +34,7 @@ def main() -> int:
     battery_cfg = config.get("battery", {})
     peer_cfg = config.get("peerUdp", {})
     wifi_cfg = config.get("wifi", {})
+    web_cfg = config.get("web", {})
     rover_name = str(peer_cfg.get("deviceId") or socket.gethostname())
 
     apply_preferred_wifi(wifi_cfg)
@@ -101,6 +103,13 @@ def main() -> int:
             args=(mqtt_runtime_cfg, stop_event),
             daemon=True,
         )
+    web_thread = None
+    if web_cfg.get("enabled", False):
+        web_thread = threading.Thread(
+            target=web_viewer_loop,
+            args=(web_cfg, rover_name, stop_event),
+            daemon=True,
+        )
 
     nmea_thread.start()
     ntrip_thread.start()
@@ -116,6 +125,8 @@ def main() -> int:
         wifi_thread.start()
     if mqtt_thread is not None:
         mqtt_thread.start()
+    if web_thread is not None:
+        web_thread.start()
 
     logging.info("Stage 1 rover started.")
 
@@ -146,6 +157,8 @@ def main() -> int:
             wifi_thread.join(timeout=2)
         if mqtt_thread is not None:
             mqtt_thread.join(timeout=2)
+        if web_thread is not None:
+            web_thread.join(timeout=2)
         ser.close()
 
     if restart_requested:

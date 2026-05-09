@@ -68,3 +68,9 @@ mqtt:
   password: ""
   topic: batch_ds
   publishIntervalSec: 0.1
+
+web:
+  enabled: false
+  host: 0.0.0.0
+  port: 8080
+  safeDistanceThresholdM: 25.0
