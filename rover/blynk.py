@@ -24,6 +24,8 @@ class SafetyViewSnapshot:
     nearest_peer_uncertainty_m: float | None
     threshold_m: float
     state: str
+    peer_count: int
+    fresh_peer_count: int
     updated_at: float
 
 
@@ -59,7 +61,7 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
     nearest_peer_uncertainty_m = None
     nearest_peer_id = ""
     nearest_peer_fix_label = "UNKNOWN"
-    state = "unknown"
+    state = "connecting"
 
     if nearest_peer is not None:
         safe_distance_m = nearest_peer.conservative_distance_m
@@ -70,6 +72,8 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
         nearest_peer_fix_label = nearest_peer.fix_label
         if safe_distance_m is not None:
             state = "safe" if safe_distance_m > threshold_m else "danger"
+    elif peers:
+        state = "stale" if not fresh_peers else "connecting"
 
     return SafetyViewSnapshot(
         rover_name=rover_name,
@@ -83,6 +87,8 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
         nearest_peer_uncertainty_m=nearest_peer_uncertainty_m,
         threshold_m=threshold_m,
         state=state,
+        peer_count=len(peers),
+        fresh_peer_count=len(fresh_peers),
         updated_at=now,
     )
 

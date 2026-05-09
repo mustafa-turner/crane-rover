@@ -26,7 +26,7 @@ HTML_PAGE = """<!doctype html>
       --pill-bg: rgba(19, 24, 21, 0.22);
       --safe: #246a3f;
       --danger: #a52f2f;
-      --unknown: #8a6f1e;
+      --neutral: #5b6066;
       --shadow: 0 22px 60px rgba(0, 0, 0, 0.2);
     }
 
@@ -55,10 +55,12 @@ HTML_PAGE = """<!doctype html>
         linear-gradient(160deg, #c84a4a 0%, #7b1f1f 100%);
     }
 
+    body.stale,
+    body.connecting,
     body.unknown {
       background:
         radial-gradient(circle at top left, rgba(255,255,255,0.16), transparent 28rem),
-        linear-gradient(160deg, #8f7a35 0%, #5f5222 100%);
+        linear-gradient(160deg, #7a8087 0%, #4f555c 100%);
     }
 
     main {
@@ -142,7 +144,7 @@ HTML_PAGE = """<!doctype html>
       letter-spacing: 0.16em;
     }
 
-    .grid {
+    .identity-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0.85rem;
@@ -170,6 +172,15 @@ HTML_PAGE = """<!doctype html>
       word-break: break-word;
     }
 
+    .card-mode {
+      margin: 0.55rem 0 0;
+      font-size: 1rem;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
     .footer {
       margin-top: 1rem;
       color: var(--muted);
@@ -184,7 +195,7 @@ HTML_PAGE = """<!doctype html>
       .panel { padding: 0.9rem; border-radius: 1.1rem; }
       .topbar { flex-direction: column; align-items: stretch; }
       .badge { align-self: flex-end; }
-      .grid { grid-template-columns: 1fr; }
+      .identity-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -202,25 +213,19 @@ HTML_PAGE = """<!doctype html>
         </div>
       </div>
 
-      <p class="distance" id="safeDistance">--.- m</p>
+      <p class="distance" id="safeDistance">-</p>
       <p class="distance-label">Safe Distance</p>
 
-      <div class="grid">
+      <div class="identity-grid">
         <article class="card">
           <p class="card-label">Current Rover</p>
           <p class="card-value" id="roverName">-</p>
-        </article>
-        <article class="card">
-          <p class="card-label">Current Mode</p>
-          <p class="card-value" id="roverMode">-</p>
+          <p class="card-mode" id="roverMode">-</p>
         </article>
         <article class="card">
           <p class="card-label">Nearest Peer</p>
           <p class="card-value" id="peerName">-</p>
-        </article>
-        <article class="card">
-          <p class="card-label">Peer Mode</p>
-          <p class="card-value" id="peerMode">-</p>
+          <p class="card-mode" id="peerMode">-</p>
         </article>
       </div>
 
@@ -234,15 +239,13 @@ HTML_PAGE = """<!doctype html>
   <script>
     function formatMeters(value) {
       if (typeof value !== "number" || !Number.isFinite(value)) {
-        return "--.- m";
+        return "-";
       }
-      return value.toFixed(1) + " m";
+      return value.toFixed(2) + " m";
     }
 
     function localModeText(data) {
-      const fix = data.rover_fix_label || "UNKNOWN";
-      const ntrip = data.rover_ntrip_connected ? "NTRIP ON" : "NTRIP OFF";
-      return fix + " / " + ntrip;
+      return data.rover_fix_label || "UNKNOWN";
     }
 
     function peerModeText(data) {
@@ -256,7 +259,9 @@ HTML_PAGE = """<!doctype html>
         ? "SAFE"
         : state === "danger"
           ? "DANGER"
-          : "WAITING";
+          : state === "stale"
+            ? "STALE DATA"
+            : "CONNECTING";
 
       document.getElementById("safeDistance").textContent = formatMeters(data.safe_distance_m);
       document.getElementById("roverName").textContent = data.rover_name || "-";
@@ -272,7 +277,15 @@ HTML_PAGE = """<!doctype html>
       if (typeof data.nearest_peer_uncertainty_m === "number" && Number.isFinite(data.nearest_peer_uncertainty_m)) {
         parts.push("Uncertainty: " + formatMeters(data.nearest_peer_uncertainty_m));
       }
-      document.getElementById("detail").textContent = parts.length ? parts.join(" | ") : "Waiting for peer data";
+      if (state === "stale") {
+        document.getElementById("detail").textContent = "Stale UDP data";
+        return;
+      }
+      if (state === "connecting") {
+        document.getElementById("detail").textContent = "Connecting to peers";
+        return;
+      }
+      document.getElementById("detail").textContent = parts.length ? parts.join(" | ") : "-";
     }
 
     async function refresh() {
@@ -285,7 +298,7 @@ HTML_PAGE = """<!doctype html>
         applyData(data);
       } catch (error) {
         document.body.className = "unknown";
-        document.getElementById("statusText").textContent = "WAITING";
+        document.getElementById("statusText").textContent = "CONNECTING";
         document.getElementById("detail").textContent = "Viewer offline";
       }
     }
@@ -326,6 +339,8 @@ def web_viewer_loop(web_cfg: dict, rover_name: str, stop_event) -> None:
                     "nearest_peer_uncertainty_m": snapshot.nearest_peer_uncertainty_m,
                     "threshold_m": snapshot.threshold_m,
                     "state": snapshot.state,
+                    "peer_count": snapshot.peer_count,
+                    "fresh_peer_count": snapshot.fresh_peer_count,
                     "updated_at": snapshot.updated_at,
                 }
                 self._send_json(payload)
