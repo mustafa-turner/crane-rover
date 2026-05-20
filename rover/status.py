@@ -26,6 +26,9 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
             ntrip_connected = STATUS.ntrip_connected
             ntrip_last_error = STATUS.ntrip_last_error
             ntrip_last_response = STATUS.ntrip_last_response
+            ntrip_consecutive_failures = STATUS.ntrip_consecutive_failures
+            ntrip_locked_out = STATUS.ntrip_locked_out
+            ntrip_lockout_reason = STATUS.ntrip_lockout_reason
             last_rtcm_received_at = STATUS.last_rtcm_received_at
             last_nmea_at = STATUS.last_nmea_at
             last_gga_at = STATUS.last_gga_at
@@ -104,6 +107,8 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 f"RTCM Source     : {correction_source_text}",
                 f"RTCM Link       : {correction_text}",
                 f"RTCM Response   : {ntrip_last_response or '-'}",
+                f"RTCM Failures   : {ntrip_consecutive_failures}",
+                f"RTCM Lockout    : {'YES' if ntrip_locked_out else 'NO'}",
                 f"Last RTCM Age   : {rtcm_age}",
                 f"RTCM Bytes      : {rtcm_bytes}",
                 f"RTCM Frames     : {rtcm_frames}",
@@ -139,6 +144,7 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}",
                 f"RTCM Source     : {correction_source_text}",
                 f"RTCM Link       : {correction_text}",
+                f"RTCM Failures   : {ntrip_consecutive_failures}",
                 f"Last RTCM Age   : {rtcm_age}",
                 f"Last NMEA Age   : {nmea_age}",
                 f"Last GGA Age    : {gga_age}",
@@ -152,6 +158,8 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 lines.append(f"Battery Power   : {fmt(battery_power_w, 3)} W")
         if ntrip_last_error:
             lines.append(f"RTCM Error      : {ntrip_last_error}")
+        if ntrip_lockout_reason and ntrip_lockout_reason != ntrip_last_error:
+            lines.append(f"RTCM Lockout    : {ntrip_lockout_reason}")
         if battery_last_error:
             lines.append(f"Battery Error   : {battery_last_error}")
         if peer_last_error:

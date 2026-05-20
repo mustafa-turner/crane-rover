@@ -9,6 +9,7 @@ from typing import Optional
 from rover.rtcm_common import process_rtcm_data, set_correction_runtime_state
 from rover.state import (
     RtcmStreamInspector,
+    consume_ntrip_reconnect_request,
     get_latest_gga,
     STATUS,
     STATUS_LOCK,
@@ -96,6 +97,7 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
     mountpoint = str(ntrip_cfg["mountpoint"]).lstrip("/")
     username = ntrip_cfg["username"]
     password = ntrip_cfg["password"]
+    max_consecutive_failures = max(1, int(ntrip_cfg.get("maxConsecutiveFailures", 25)))
     connect_timeout = int(rtcm_cfg.get("connectTimeoutSec", 10))
     read_timeout = int(rtcm_cfg.get("readTimeoutSec", 15))
     reconnect_delay = int(rtcm_cfg.get("reconnectDelaySec", 5))
@@ -108,8 +110,40 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
     logging.info("NTRIP loop started for %s:%s/%s", host, port, mountpoint)
     inspector = RtcmStreamInspector()
     last_rtcm_log_at = 0.0
+    consecutive_failures = 0
 
     while not stop_event.is_set():
+        if consecutive_failures >= max_consecutive_failures:
+            lockout_reason = (
+                f"NTRIP lockout after {consecutive_failures} failed attempts "
+                f"(mountpoint={mountpoint}). Use web reconnect to try again."
+            )
+            set_correction_runtime_state(
+                mode="ntrip",
+                connected=False,
+                last_error=lockout_reason,
+                consecutive_failures=consecutive_failures,
+                locked_out=True,
+                lockout_reason=lockout_reason,
+            )
+            logging.error("%s", lockout_reason)
+
+            while not stop_event.is_set():
+                if consume_ntrip_reconnect_request():
+                    consecutive_failures = 0
+                    set_correction_runtime_state(
+                        mode="ntrip",
+                        connected=False,
+                        last_error="Reconnect requested from web viewer",
+                        consecutive_failures=0,
+                        locked_out=False,
+                        lockout_reason=None,
+                    )
+                    logging.info("NTRIP reconnect requested from web viewer; resuming attempts")
+                    break
+                stop_event.wait(0.2)
+            continue
+
         sock: Optional[socket.socket] = None
         try:
             logging.info("Connecting to NTRIP caster %s:%s mountpoint=%s", host, port, mountpoint)
@@ -136,7 +170,11 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
                 connected=True,
                 last_error=None,
                 last_response=response_line,
+                consecutive_failures=0,
+                locked_out=False,
+                lockout_reason=None,
             )
+            consecutive_failures = 0
 
             last_rtcm_data_at = time.time()
             last_gga_sent_at = 0.0
@@ -208,9 +246,16 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
                             f"gga_sent={has_sent_gga}, latest_gga_age={gga_age_text})"
                         )
         except Exception as exc:
-            set_correction_runtime_state(mode="ntrip", connected=False, last_error=str(exc))
+            consecutive_failures += 1
+            set_correction_runtime_state(
+                mode="ntrip",
+                connected=False,
+                last_error=str(exc),
+                consecutive_failures=consecutive_failures,
+                locked_out=False,
+            )
             logging.error("NTRIP error: %s", exc)
-            if not stop_event.is_set():
+            if not stop_event.is_set() and consecutive_failures < max_consecutive_failures:
                 logging.info("Reconnecting NTRIP in %s seconds...", reconnect_delay)
                 time.sleep(reconnect_delay)
         finally:
@@ -220,5 +265,5 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
                 except Exception:
                     pass
 
-    set_correction_runtime_state(mode="ntrip", connected=False)
+    set_correction_runtime_state(mode="ntrip", connected=False, locked_out=False)
     logging.info("NTRIP loop stopped")

@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
 from rover.blynk import get_safety_view_snapshot
+from rover.state import request_ntrip_reconnect
 
 
 HTML_PAGE = """<!doctype html>
@@ -191,6 +192,51 @@ HTML_PAGE = """<!doctype html>
       flex-wrap: wrap;
     }
 
+    .ntrip-control {
+      margin-top: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      min-height: 2.5rem;
+    }
+
+    .ntrip-status {
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: right;
+      flex: 1;
+    }
+
+    .ntrip-status[hidden] {
+      display: none;
+    }
+
+    .reconnect-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.45rem 0.8rem;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+    }
+
+    .reconnect-button[hidden] {
+      display: none;
+    }
+
+    .reconnect-button:disabled {
+      opacity: 0.65;
+      cursor: wait;
+    }
+
     @media (max-width: 640px) {
       .panel { padding: 0.9rem; border-radius: 1.1rem; }
       .topbar { flex-direction: column; align-items: stretch; }
@@ -233,10 +279,17 @@ HTML_PAGE = """<!doctype html>
         <span id="threshold">Threshold: 25.0 m</span>
         <span id="detail">Waiting for peer data</span>
       </div>
+
+      <div class="ntrip-control">
+        <div class="ntrip-status" id="ntripStatusDetail" hidden></div>
+        <button class="reconnect-button" id="reconnectButton" hidden type="button">Attempt Reconnect</button>
+      </div>
     </section>
   </main>
 
   <script>
+    let reconnectPending = false;
+
     function formatMeters(value) {
       if (typeof value !== "number" || !Number.isFinite(value)) {
         return "-";
@@ -250,6 +303,20 @@ HTML_PAGE = """<!doctype html>
 
     function peerModeText(data) {
       return data.nearest_peer_fix_label || "UNKNOWN";
+    }
+
+    function updateReconnectControl(data) {
+      const button = document.getElementById("reconnectButton");
+      const detail = document.getElementById("ntripStatusDetail");
+      const lockedOut = data.rover_correction_mode === "ntrip" && data.ntrip_locked_out === true;
+      const statusDetail = typeof data.ntrip_status_detail === "string" ? data.ntrip_status_detail : "";
+
+      button.hidden = !lockedOut;
+      button.disabled = reconnectPending;
+      button.textContent = reconnectPending ? "Retrying..." : "Attempt Reconnect";
+
+      detail.hidden = !statusDetail;
+      detail.textContent = statusDetail;
     }
 
     function applyData(data) {
@@ -279,13 +346,45 @@ HTML_PAGE = """<!doctype html>
       }
       if (state === "stale") {
         document.getElementById("detail").textContent = "Stale UDP data";
+        updateReconnectControl(data);
         return;
       }
       if (state === "connecting") {
         document.getElementById("detail").textContent = "Connecting to peers";
+        updateReconnectControl(data);
         return;
       }
       document.getElementById("detail").textContent = parts.length ? parts.join(" | ") : "-";
+      updateReconnectControl(data);
+    }
+
+    async function requestReconnect() {
+      if (reconnectPending) {
+        return;
+      }
+
+      reconnectPending = true;
+      updateReconnectControl({
+        rover_correction_mode: "ntrip",
+        ntrip_locked_out: true,
+        ntrip_status_detail: "Reconnect requested..."
+      });
+
+      try {
+        const response = await fetch("/api/ntrip/reconnect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        });
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+      } catch (error) {
+        document.getElementById("ntripStatusDetail").hidden = false;
+        document.getElementById("ntripStatusDetail").textContent = "Reconnect request failed";
+      } finally {
+        reconnectPending = false;
+      }
     }
 
     async function refresh() {
@@ -300,9 +399,15 @@ HTML_PAGE = """<!doctype html>
         document.body.className = "unknown";
         document.getElementById("statusText").textContent = "CONNECTING";
         document.getElementById("detail").textContent = "Viewer offline";
+        updateReconnectControl({
+          rover_correction_mode: "",
+          ntrip_locked_out: false,
+          ntrip_status_detail: ""
+        });
       }
     }
 
+    document.getElementById("reconnectButton").addEventListener("click", requestReconnect);
     refresh();
     setInterval(refresh, 1000);
   </script>
@@ -332,6 +437,9 @@ def web_viewer_loop(web_cfg: dict, rover_name: str, stop_event) -> None:
                     "rover_fix_label": snapshot.rover_fix_label,
                     "rover_correction_mode": snapshot.rover_correction_mode,
                     "rover_ntrip_connected": snapshot.rover_ntrip_connected,
+                    "ntrip_locked_out": snapshot.rover_ntrip_locked_out,
+                    "ntrip_consecutive_failures": snapshot.rover_ntrip_consecutive_failures,
+                    "ntrip_status_detail": snapshot.rover_ntrip_status_detail,
                     "nearest_peer_id": snapshot.nearest_peer_id,
                     "nearest_peer_fix_label": snapshot.nearest_peer_fix_label,
                     "safe_distance_m": snapshot.safe_distance_m,
@@ -348,6 +456,29 @@ def web_viewer_loop(web_cfg: dict, rover_name: str, stop_event) -> None:
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
 
+        def do_POST(self) -> None:  # noqa: N802
+            if self.path != "/api/ntrip/reconnect":
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+
+            content_length = int(self.headers.get("Content-Length", "0") or "0")
+            if content_length > 0:
+                self.rfile.read(content_length)
+
+            snapshot = get_safety_view_snapshot(rover_name=rover_name, threshold_m=threshold_m)
+            if snapshot.rover_correction_mode != "ntrip" or not snapshot.rover_ntrip_locked_out:
+                self._send_json(
+                    {
+                        "accepted": False,
+                        "message": "NTRIP reconnect is only available while NTRIP is locked out.",
+                    },
+                    status=HTTPStatus.CONFLICT,
+                )
+                return
+
+            request_ntrip_reconnect()
+            self._send_json({"accepted": True, "message": "NTRIP reconnect requested."})
+
         def log_message(self, fmt: str, *args) -> None:
             logging.debug("Web viewer %s - %s", self.address_string(), fmt % args)
 
@@ -360,9 +491,9 @@ def web_viewer_loop(web_cfg: dict, rover_name: str, stop_event) -> None:
             self.end_headers()
             self.wfile.write(encoded)
 
-        def _send_json(self, payload: dict) -> None:
+        def _send_json(self, payload: dict, *, status: HTTPStatus = HTTPStatus.OK) -> None:
             encoded = json.dumps(payload).encode("utf-8")
-            self.send_response(HTTPStatus.OK)
+            self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(encoded)))
             self.send_header("Cache-Control", "no-store")

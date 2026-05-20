@@ -89,6 +89,9 @@ class RoverStatus:
     ntrip_connected: bool = False
     ntrip_last_error: Optional[str] = None
     ntrip_last_response: Optional[str] = None
+    ntrip_consecutive_failures: int = 0
+    ntrip_locked_out: bool = False
+    ntrip_lockout_reason: Optional[str] = None
     last_rtcm_received_at: Optional[float] = None
     last_nmea_at: Optional[float] = None
     last_gga_at: Optional[float] = None
@@ -119,6 +122,7 @@ STATUS = RoverStatus()
 
 LATEST_GGA_LOCK = threading.Lock()
 LATEST_GGA: Optional[str] = None
+NTRIP_RECONNECT_REQUEST = threading.Event()
 
 
 class RtcmStreamInspector:
@@ -254,6 +258,17 @@ def store_latest_gga(raw_data: bytes) -> None:
 def get_latest_gga() -> Optional[str]:
     with LATEST_GGA_LOCK:
         return LATEST_GGA
+
+
+def request_ntrip_reconnect() -> None:
+    NTRIP_RECONNECT_REQUEST.set()
+
+
+def consume_ntrip_reconnect_request() -> bool:
+    if not NTRIP_RECONNECT_REQUEST.is_set():
+        return False
+    NTRIP_RECONNECT_REQUEST.clear()
+    return True
 
 
 def update_status_from_gga(parsed) -> None:

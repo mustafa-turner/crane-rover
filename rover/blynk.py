@@ -17,6 +17,9 @@ class SafetyViewSnapshot:
     rover_fix_label: str
     rover_correction_mode: str
     rover_ntrip_connected: bool
+    rover_ntrip_locked_out: bool
+    rover_ntrip_consecutive_failures: int
+    rover_ntrip_status_detail: str
     nearest_peer_id: str
     nearest_peer_fix_label: str
     safe_distance_m: float | None
@@ -35,6 +38,11 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
         fix_label = STATUS.fix_label
         correction_mode = STATUS.correction_source_mode
         ntrip_connected = STATUS.ntrip_connected
+        ntrip_locked_out = STATUS.ntrip_locked_out
+        ntrip_consecutive_failures = STATUS.ntrip_consecutive_failures
+        ntrip_lockout_reason = STATUS.ntrip_lockout_reason
+        ntrip_last_error = STATUS.ntrip_last_error
+        ntrip_last_response = STATUS.ntrip_last_response
         peers = list(STATUS.peers.values())
 
     now = time.time()
@@ -82,6 +90,9 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
         rover_fix_label=fix_label,
         rover_correction_mode=correction_mode,
         rover_ntrip_connected=ntrip_connected,
+        rover_ntrip_locked_out=ntrip_locked_out,
+        rover_ntrip_consecutive_failures=ntrip_consecutive_failures,
+        rover_ntrip_status_detail=ntrip_lockout_reason or ntrip_last_error or ntrip_last_response or "",
         nearest_peer_id=nearest_peer_id,
         nearest_peer_fix_label=nearest_peer_fix_label,
         safe_distance_m=safe_distance_m,

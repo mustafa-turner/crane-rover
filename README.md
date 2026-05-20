@@ -302,6 +302,7 @@ ntrip:
   mountpoint: your_mountpoint
   username: your_username
   password: your_password
+  maxConsecutiveFailures: 25
 
 tcp:
   host: 192.168.1.50
@@ -394,6 +395,8 @@ web:
   NTRIP username.
 - `password`
   NTRIP password.
+- `maxConsecutiveFailures`
+  Stops automatic NTRIP reconnects after this many consecutive failures. The default `25` is intentionally well below RTK2GO's documented "hundreds of failed connections" ban range. With the default `5` second reconnect delay, `25` failures is about `125` seconds of retrying before lockout.
 
 ### `tcp`
 

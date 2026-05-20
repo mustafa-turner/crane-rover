@@ -12,12 +12,21 @@ def set_correction_runtime_state(
     connected: bool,
     last_error: str | None = None,
     last_response: str | None = None,
+    consecutive_failures: int | None = None,
+    locked_out: bool | None = None,
+    lockout_reason: str | None = None,
 ) -> None:
     with STATUS_LOCK:
         STATUS.correction_source_mode = mode
         STATUS.ntrip_connected = connected
         STATUS.ntrip_last_error = last_error
         STATUS.ntrip_last_response = last_response
+        if consecutive_failures is not None:
+            STATUS.ntrip_consecutive_failures = consecutive_failures
+        if locked_out is not None:
+            STATUS.ntrip_locked_out = locked_out
+        if lockout_reason is not None or locked_out is False:
+            STATUS.ntrip_lockout_reason = lockout_reason
 
 
 def process_rtcm_data(

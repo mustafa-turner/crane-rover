@@ -33,6 +33,7 @@ PUBLIC_CONFIG_TEMPLATE = {
         "mountpoint": "",
         "username": "",
         "password": "",
+        "maxConsecutiveFailures": 25,
     },
     "tcp": {
         "host": "",
