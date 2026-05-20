@@ -22,6 +22,7 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
             sats = STATUS.satellites
             hdop = STATUS.hdop
             fix_label = STATUS.fix_label
+            correction_source_mode = STATUS.correction_source_mode
             ntrip_connected = STATUS.ntrip_connected
             ntrip_last_error = STATUS.ntrip_last_error
             ntrip_last_response = STATUS.ntrip_last_response
@@ -78,7 +79,8 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
         if peer_last_receive_at is not None:
             peer_receive_age = f"{now - peer_last_receive_at:.1f}s"
 
-        ntrip_text = "CONNECTED" if ntrip_connected else "DISCONNECTED"
+        correction_text = "CONNECTED" if ntrip_connected else "DISCONNECTED"
+        correction_source_text = (correction_source_mode or "ntrip").upper()
         battery_present_text = "-"
         if battery_present is True:
             battery_present_text = "YES"
@@ -99,8 +101,9 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 f"HDOP            : {fmt(hdop, 2)}",
                 f"Fix / RTK Mode  : {fix_label}",
                 f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}",
-                f"NTRIP Status    : {ntrip_text}",
-                f"NTRIP Response  : {ntrip_last_response or '-'}",
+                f"RTCM Source     : {correction_source_text}",
+                f"RTCM Link       : {correction_text}",
+                f"RTCM Response   : {ntrip_last_response or '-'}",
                 f"Last RTCM Age   : {rtcm_age}",
                 f"RTCM Bytes      : {rtcm_bytes}",
                 f"RTCM Frames     : {rtcm_frames}",
@@ -134,7 +137,8 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 f"HDOP            : {fmt(hdop, 2)}",
                 f"Fix / RTK Mode  : {fix_label}",
                 f"Local Acc (m)   : {fmt(local_horizontal_accuracy_m, 3)}",
-                f"NTRIP Status    : {ntrip_text}",
+                f"RTCM Source     : {correction_source_text}",
+                f"RTCM Link       : {correction_text}",
                 f"Last RTCM Age   : {rtcm_age}",
                 f"Last NMEA Age   : {nmea_age}",
                 f"Last GGA Age    : {gga_age}",
@@ -147,7 +151,7 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
             if battery_power_w is not None:
                 lines.append(f"Battery Power   : {fmt(battery_power_w, 3)} W")
         if ntrip_last_error:
-            lines.append(f"NTRIP Error     : {ntrip_last_error}")
+            lines.append(f"RTCM Error      : {ntrip_last_error}")
         if battery_last_error:
             lines.append(f"Battery Error   : {battery_last_error}")
         if peer_last_error:

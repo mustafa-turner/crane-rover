@@ -24,12 +24,19 @@ PUBLIC_CONFIG_TEMPLATE = {
         "network4Ssid": "",
         "network4Password": "",
     },
+    "rtcm": {
+        "mode": "ntrip",
+    },
     "ntrip": {
         "host": "",
         "port": 2101,
         "mountpoint": "",
         "username": "",
         "password": "",
+    },
+    "tcp": {
+        "host": "",
+        "port": 9000,
     },
     "logging": {
         "level": "INFO",
@@ -120,7 +127,36 @@ def setup_logging(level: str, *, handlers: list[logging.Handler] | None = None) 
 
 
 def normalize_config(config: dict) -> dict:
-    return _merge_public_config(PUBLIC_CONFIG_TEMPLATE, config or {})
+    config = _migrate_legacy_rtcm_config(config or {})
+    return _merge_public_config(PUBLIC_CONFIG_TEMPLATE, config)
+
+
+def _migrate_legacy_rtcm_config(config: dict) -> dict:
+    migrated = deepcopy(config)
+    ntrip_cfg = migrated.get("ntrip")
+    rtcm_cfg = migrated.get("rtcm")
+    tcp_cfg = migrated.get("tcp")
+
+    if isinstance(ntrip_cfg, dict):
+        if not isinstance(rtcm_cfg, dict):
+            rtcm_cfg = {}
+            migrated["rtcm"] = rtcm_cfg
+        if "mode" not in rtcm_cfg and "mode" in ntrip_cfg:
+            rtcm_cfg["mode"] = ntrip_cfg.get("mode")
+
+        if not isinstance(tcp_cfg, dict):
+            tcp_cfg = {}
+            migrated["tcp"] = tcp_cfg
+        if "host" not in tcp_cfg and "tcpHost" in ntrip_cfg:
+            tcp_cfg["host"] = ntrip_cfg.get("tcpHost")
+        if "port" not in tcp_cfg and "tcpPort" in ntrip_cfg:
+            tcp_cfg["port"] = ntrip_cfg.get("tcpPort")
+
+        ntrip_cfg.pop("mode", None)
+        ntrip_cfg.pop("tcpHost", None)
+        ntrip_cfg.pop("tcpPort", None)
+
+    return migrated
 
 
 def _merge_public_config(template: dict, provided: dict) -> dict:

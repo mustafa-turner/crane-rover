@@ -10,8 +10,8 @@ from rover.blynk import blynk_loop, mqtt_loop
 from rover.config import load_config, setup_logging
 from rover.console import SerialConsoleManager
 from rover.gnss import nmea_reader_loop, open_serial
-from rover.ntrip import ntrip_loop
 from rover.peer_udp import peer_udp_loop
+from rover.rtcm import correction_loop
 from rover.status import DEFAULT_STATUS_INTERVAL_SEC, status_printer_loop
 from rover.web import web_viewer_loop
 from rover.wifi import apply_preferred_wifi, wifi_monitor_loop
@@ -35,6 +35,9 @@ def main() -> int:
     peer_cfg = config.get("peerUdp", {})
     wifi_cfg = config.get("wifi", {})
     web_cfg = config.get("web", {})
+    rtcm_cfg = config.get("rtcm", {})
+    ntrip_cfg = config.get("ntrip", {})
+    tcp_cfg = config.get("tcp", {})
     rover_name = str(peer_cfg.get("deviceId") or socket.gethostname())
 
     apply_preferred_wifi(wifi_cfg)
@@ -50,9 +53,9 @@ def main() -> int:
         args=(ser, stop_event),
         daemon=True,
     )
-    ntrip_thread = threading.Thread(
-        target=ntrip_loop,
-        args=(ser, config["ntrip"], stop_event),
+    correction_thread = threading.Thread(
+        target=correction_loop,
+        args=(ser, rtcm_cfg, ntrip_cfg, tcp_cfg, stop_event),
         daemon=True,
     )
     printer_thread = None
@@ -112,7 +115,7 @@ def main() -> int:
         )
 
     nmea_thread.start()
-    ntrip_thread.start()
+    correction_thread.start()
     if printer_thread is not None:
         printer_thread.start()
     if battery_thread is not None:
@@ -144,7 +147,7 @@ def main() -> int:
         stop_event.set()
         console.stop()
         nmea_thread.join(timeout=2)
-        ntrip_thread.join(timeout=2)
+        correction_thread.join(timeout=2)
         if printer_thread is not None:
             printer_thread.join(timeout=2)
         if battery_thread is not None:

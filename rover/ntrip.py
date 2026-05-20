@@ -6,12 +6,12 @@ import socket
 import time
 from typing import Optional
 
+from rover.rtcm_common import process_rtcm_data, set_correction_runtime_state
 from rover.state import (
-    STATUS,
-    STATUS_LOCK,
     RtcmStreamInspector,
     get_latest_gga,
-    update_status_from_rtcm,
+    STATUS,
+    STATUS_LOCK,
 )
 
 
@@ -90,20 +90,20 @@ def send_gga_to_caster(sock: socket.socket) -> bool:
     return True
 
 
-def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
+def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
     host = ntrip_cfg["host"]
     port = int(ntrip_cfg.get("port", 2101))
     mountpoint = str(ntrip_cfg["mountpoint"]).lstrip("/")
     username = ntrip_cfg["username"]
     password = ntrip_cfg["password"]
-    connect_timeout = int(ntrip_cfg.get("connectTimeoutSec", 10))
-    read_timeout = int(ntrip_cfg.get("readTimeoutSec", 15))
-    reconnect_delay = int(ntrip_cfg.get("reconnectDelaySec", 5))
-    chunk_size = int(ntrip_cfg.get("chunkSize", 1024))
+    connect_timeout = int(rtcm_cfg.get("connectTimeoutSec", 10))
+    read_timeout = int(rtcm_cfg.get("readTimeoutSec", 15))
+    reconnect_delay = int(rtcm_cfg.get("reconnectDelaySec", 5))
+    chunk_size = int(rtcm_cfg.get("chunkSize", 1024))
     gga_forward_enabled = bool(ntrip_cfg.get("ggaForwardEnabled", True))
     gga_forward_interval = int(ntrip_cfg.get("ggaForwardIntervalSec", 5))
-    recv_poll_timeout = float(ntrip_cfg.get("recvPollTimeoutSec", 1.0))
-    rtcm_log_interval = int(ntrip_cfg.get("rtcmLogIntervalSec", 10))
+    recv_poll_timeout = float(rtcm_cfg.get("recvPollTimeoutSec", 1.0))
+    rtcm_log_interval = int(rtcm_cfg.get("rtcmLogIntervalSec", 10))
 
     logging.info("NTRIP loop started for %s:%s/%s", host, port, mountpoint)
     inspector = RtcmStreamInspector()
@@ -131,10 +131,12 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
             response_line = header.decode("latin1", errors="ignore").splitlines()[0] if header else ""
             sock.settimeout(recv_poll_timeout)
 
-            with STATUS_LOCK:
-                STATUS.ntrip_connected = True
-                STATUS.ntrip_last_error = None
-                STATUS.ntrip_last_response = response_line
+            set_correction_runtime_state(
+                mode="ntrip",
+                connected=True,
+                last_error=None,
+                last_response=response_line,
+            )
 
             last_rtcm_data_at = time.time()
             last_gga_sent_at = 0.0
@@ -153,17 +155,14 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
 
             if initial_data:
                 logging.debug("Processing %d initial RTCM bytes from handshake", len(initial_data))
-                ser.write(initial_data)
-                ser.flush()
-                rtcm_types = inspector.feed(initial_data)
-                now = time.time()
-                last_rtcm_data_at = now
-                with STATUS_LOCK:
-                    STATUS.last_rtcm_received_at = now
-                update_status_from_rtcm(rtcm_types, len(initial_data), inspector)
-                if rtcm_types and (now - last_rtcm_log_at >= rtcm_log_interval):
-                    logging.info("Recent RTCM types: %s", inspector.describe_recent())
-                    last_rtcm_log_at = now
+                last_rtcm_log_at = process_rtcm_data(
+                    ser=ser,
+                    data=initial_data,
+                    inspector=inspector,
+                    rtcm_log_interval=rtcm_log_interval,
+                    last_rtcm_log_at=last_rtcm_log_at,
+                )
+                last_rtcm_data_at = time.time()
 
             while not stop_event.is_set():
                 now = time.time()
@@ -184,19 +183,14 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                     if not data:
                         raise ConnectionError("NTRIP connection closed by server")
 
-                    ser.write(data)
-                    ser.flush()
-                    rtcm_types = inspector.feed(data)
-
-                    now = time.time()
-                    last_rtcm_data_at = now
-                    with STATUS_LOCK:
-                        STATUS.last_rtcm_received_at = now
-
-                    update_status_from_rtcm(rtcm_types, len(data), inspector)
-                    if rtcm_types and (now - last_rtcm_log_at >= rtcm_log_interval):
-                        logging.info("Recent RTCM types: %s", inspector.describe_recent())
-                        last_rtcm_log_at = now
+                    last_rtcm_log_at = process_rtcm_data(
+                        ser=ser,
+                        data=data,
+                        inspector=inspector,
+                        rtcm_log_interval=rtcm_log_interval,
+                        last_rtcm_log_at=last_rtcm_log_at,
+                    )
+                    last_rtcm_data_at = time.time()
                 except socket.timeout:
                     if gga_forward_enabled and not has_sent_gga:
                         if not waiting_for_gga_logged:
@@ -214,10 +208,7 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                             f"gga_sent={has_sent_gga}, latest_gga_age={gga_age_text})"
                         )
         except Exception as exc:
-            with STATUS_LOCK:
-                STATUS.ntrip_connected = False
-                STATUS.ntrip_last_error = str(exc)
-
+            set_correction_runtime_state(mode="ntrip", connected=False, last_error=str(exc))
             logging.error("NTRIP error: %s", exc)
             if not stop_event.is_set():
                 logging.info("Reconnecting NTRIP in %s seconds...", reconnect_delay)
@@ -229,6 +220,5 @@ def ntrip_loop(ser, ntrip_cfg: dict, stop_event) -> None:
                 except Exception:
                     pass
 
-    with STATUS_LOCK:
-        STATUS.ntrip_connected = False
+    set_correction_runtime_state(mode="ntrip", connected=False)
     logging.info("NTRIP loop stopped")

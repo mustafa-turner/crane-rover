@@ -14,12 +14,19 @@ wifi:
   network4Ssid: ""
   network4Password: ""
 
+rtcm:
+  mode: ntrip
+
 ntrip:
   host: your.ntrip.caster.host
   port: 2101
   mountpoint: your_mountpoint
   username: your_username
   password: your_password
+
+tcp:
+  host: 192.168.1.50
+  port: 9000
 
 logging:
   level: INFO

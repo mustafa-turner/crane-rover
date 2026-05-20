@@ -330,6 +330,7 @@ def web_viewer_loop(web_cfg: dict, rover_name: str, stop_event) -> None:
                 payload = {
                     "rover_name": snapshot.rover_name,
                     "rover_fix_label": snapshot.rover_fix_label,
+                    "rover_correction_mode": snapshot.rover_correction_mode,
                     "rover_ntrip_connected": snapshot.rover_ntrip_connected,
                     "nearest_peer_id": snapshot.nearest_peer_id,
                     "nearest_peer_fix_label": snapshot.nearest_peer_fix_label,

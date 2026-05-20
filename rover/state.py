@@ -85,6 +85,7 @@ class RoverStatus:
     hdop: Optional[float] = None
     fix_quality: Optional[int] = None
     fix_label: str = "UNKNOWN"
+    correction_source_mode: str = "ntrip"
     ntrip_connected: bool = False
     ntrip_last_error: Optional[str] = None
     ntrip_last_response: Optional[str] = None

@@ -2,7 +2,7 @@
 
 Python rover application for Raspberry Pi based crane positioning nodes.
 
-This project is built around a GNSS receiver, an NTRIP correction link, an optional Waveshare UPS HAT (C), UDP peer broadcasting between rovers, and MQTT publishing to Blynk plus an optional second broker.
+This project is built around a GNSS receiver, an RTCM correction link, an optional Waveshare UPS HAT (C), UDP peer broadcasting between rovers, and MQTT publishing to Blynk plus an optional second broker.
 
 ## What It Does
 
@@ -10,7 +10,7 @@ Each rover can:
 
 - read NMEA from a GNSS receiver over serial
 - select a preferred Wi-Fi network from up to four configured SSIDs
-- connect to an NTRIP caster and forward RTCM corrections back into the receiver
+- connect to either an NTRIP caster or a plain TCP RTCM stream and forward corrections back into the receiver
 - track rover fix mode, HDOP, RTCM activity, and battery telemetry
 - broadcast its latest timestamped position and accuracy to nearby rover devices over UDP
 - compute distance to the nearest peer rover
@@ -29,8 +29,12 @@ Each rover can:
   Reads NMEA sentences from the GNSS receiver.
 - `rover/wifi.py`
   Selects the first available configured Wi-Fi network through NetworkManager.
+- `rover/rtcm.py`
+  Selects the configured RTCM transport.
 - `rover/ntrip.py`
-  Connects to the NTRIP caster and forwards RTCM data to the receiver.
+  Connects to an NTRIP caster and forwards correction data to the receiver.
+- `rover/tcp.py`
+  Connects to a plain TCP RTCM stream and forwards correction data to the receiver.
 - `rover/status.py`
   Prints current rover state to the terminal.
 - `rover/battery.py`
@@ -61,7 +65,7 @@ At runtime, the normal flow is:
 1. Optionally switch Wi-Fi to the first available configured SSID.
 2. Open the GNSS serial port.
 3. Start reading NMEA from the receiver.
-4. Start NTRIP and inject RTCM corrections into the receiver.
+4. Start the configured RTCM source and inject corrections into the receiver.
 5. Update shared rover state from GNSS and RTCM data.
 6. Optionally read UPS battery telemetry.
 7. Broadcast local rover state to peers over UDP.
@@ -77,7 +81,9 @@ At runtime, the normal flow is:
 - `rover/config.py`
 - `rover/state.py`
 - `rover/gnss.py`
+- `rover/rtcm.py`
 - `rover/ntrip.py`
+- `rover/tcp.py`
 - `rover/battery.py`
 - `rover/peer_udp.py`
 - `rover/blynk.py`
@@ -96,8 +102,8 @@ Typical environment:
 - Python 3
 - GNSS receiver connected by UART/serial
 - NetworkManager with `nmcli` available if Wi-Fi auto-selection is enabled
-- NTRIP caster credentials
-- network access for NTRIP and optionally MQTT brokers such as Blynk
+- NTRIP caster credentials or a reachable TCP RTCM source on the same network
+- network access for RTCM correction delivery and optionally MQTT brokers such as Blynk
 - optional Waveshare UPS HAT (C)
 - optional multiple rovers on the same network for UDP peer ranging
 
@@ -224,7 +230,7 @@ If the rover runs in an interactive terminal, the app supports live config editi
 
 - leave it idle to watch logs and status
 - press any key to open the settings menu
-- enter section numbers such as `1` for `serial`, `2` for `wifi`, or `3` for `ntrip`
+- enter section numbers such as `1` for `serial`, `2` for `wifi`, `3` for `rtcm`, `4` for `ntrip`, or `5` for `tcp`
 - drill down into fields, enter a new value, then use `s` to save and restart
 - use `q` to leave the menu without saving
 
@@ -287,12 +293,19 @@ wifi:
   network4Ssid: ""
   network4Password: ""
 
+rtcm:
+  mode: ntrip
+
 ntrip:
   host: your.ntrip.caster.host
   port: 2101
   mountpoint: your_mountpoint
   username: your_username
   password: your_password
+
+tcp:
+  host: 192.168.1.50
+  port: 9000
 
 logging:
   level: INFO
@@ -364,6 +377,11 @@ web:
 - `network1Password` to `network4Password`
   Passwords paired with the configured SSIDs.
 
+### `rtcm`
+
+- `mode`
+  RTCM source mode. Use `ntrip` for caster login or `tcp` for a raw RTCM stream on the local network.
+
 ### `ntrip`
 
 - `host`
@@ -376,6 +394,13 @@ web:
   NTRIP username.
 - `password`
   NTRIP password.
+
+### `tcp`
+
+- `host`
+  TCP RTCM source hostname or IP for `tcp` mode.
+- `port`
+  TCP RTCM source port for `tcp` mode.
 
 ### `logging`
 
@@ -559,7 +584,7 @@ The status screen shows:
 - HDOP
 - local fix / RTK mode
 - estimated local horizontal accuracy
-- NTRIP connection status and RTCM activity
+- RTCM source status and RTCM activity
 - battery level, voltage, current, power, and battery status
 - peer broadcast and receive timing
 - nearest-peer style peer lines
@@ -649,6 +674,7 @@ That same payload can be sent to Blynk and, if enabled, to a second MQTT broker 
 | `rtcm_age_sec` |  |
 | `fix_mode` |  |
 | `ntrip_status` |  |
+| `rtcm_source_mode` |  |
 | `battery_percent` |  |
 | `battery_voltage_v` |  |
 | `battery_current_a` |  |

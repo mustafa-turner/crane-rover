@@ -20,7 +20,9 @@ from rover.config import save_config
 SECTION_ORDER = [
     "serial",
     "wifi",
+    "rtcm",
     "ntrip",
+    "tcp",
     "logging",
     "status",
     "battery",
@@ -39,7 +41,9 @@ CONSOLE_WRITE_TIMEOUT_SEC = 0.2
 SECTION_HELP = {
     "serial": "GNSS receiver serial port settings.",
     "wifi": "Preferred Wi-Fi networks, checked in priority order for startup and failover.",
-    "ntrip": "NTRIP caster connection settings for RTCM corrections.",
+    "rtcm": "Shared RTCM transport selection and stream timing settings.",
+    "ntrip": "NTRIP caster connection settings.",
+    "tcp": "Plain TCP RTCM source settings for the local network.",
     "logging": "Application logging verbosity.",
     "status": "Operator status screen controls.",
     "battery": "Battery monitoring configuration.",
@@ -62,11 +66,14 @@ FIELD_HELP = {
     "wifi.network3Password": "Password for network3Ssid.",
     "wifi.network4Ssid": "Fourth-priority Wi-Fi SSID.",
     "wifi.network4Password": "Password for network4Ssid.",
+    "rtcm.mode": "Correction transport mode. Use ntrip for caster login or tcp for a raw RTCM TCP stream on your LAN.",
     "ntrip.host": "NTRIP caster hostname or IP address.",
     "ntrip.port": "NTRIP caster TCP port, usually 2101.",
     "ntrip.mountpoint": "NTRIP mountpoint name.",
     "ntrip.username": "NTRIP username.",
     "ntrip.password": "NTRIP password.",
+    "tcp.host": "TCP RTCM source hostname or IP address on the local network.",
+    "tcp.port": "TCP RTCM source port for the raw RTCM stream.",
     "logging.level": "Logging verbosity.",
     "status.enabled": "Enable the live rover status screen.",
     "status.mode": "Status screen detail level.",
@@ -105,6 +112,7 @@ FIELD_HELP = {
 }
 
 FIELD_OPTIONS = {
+    "rtcm.mode": "Options: ntrip, tcp",
     "wifi.enabled": "Options: true, false",
     "logging.level": "Options: DEBUG, INFO, WARNING, ERROR, CRITICAL",
     "status.enabled": "Options: true, false",

@@ -15,6 +15,7 @@ from rover.state import FIX_MODE_ENUM, NTRIP_STATUS_ENUM, STATUS, STATUS_LOCK
 class SafetyViewSnapshot:
     rover_name: str
     rover_fix_label: str
+    rover_correction_mode: str
     rover_ntrip_connected: bool
     nearest_peer_id: str
     nearest_peer_fix_label: str
@@ -32,6 +33,7 @@ class SafetyViewSnapshot:
 def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) -> SafetyViewSnapshot:
     with STATUS_LOCK:
         fix_label = STATUS.fix_label
+        correction_mode = STATUS.correction_source_mode
         ntrip_connected = STATUS.ntrip_connected
         peers = list(STATUS.peers.values())
 
@@ -78,6 +80,7 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
     return SafetyViewSnapshot(
         rover_name=rover_name,
         rover_fix_label=fix_label,
+        rover_correction_mode=correction_mode,
         rover_ntrip_connected=ntrip_connected,
         nearest_peer_id=nearest_peer_id,
         nearest_peer_fix_label=nearest_peer_fix_label,
@@ -101,6 +104,7 @@ def get_telemetry_payload(rover_name: str = "") -> dict:
         sats = STATUS.satellites
         hdop = STATUS.hdop
         fix_label = STATUS.fix_label
+        correction_mode = STATUS.correction_source_mode
         ntrip_connected = STATUS.ntrip_connected
         last_rtcm_received_at = STATUS.last_rtcm_received_at
         battery_percent = STATUS.battery_percent
@@ -128,6 +132,7 @@ def get_telemetry_payload(rover_name: str = "") -> dict:
         "rtcm_age_sec": round(rtcm_age_sec, 1),
         "fix_mode": FIX_MODE_ENUM.get(fix_label, 0),
         "ntrip_status": NTRIP_STATUS_ENUM[ntrip_connected],
+        "rtcm_source_mode": correction_mode,
         "battery_percent": round(battery_percent, 1) if battery_percent is not None else -1.0,
         "battery_voltage_v": round(battery_voltage_v, 3) if battery_voltage_v is not None else 0.0,
         "battery_current_a": round(battery_current_a, 3) if battery_current_a is not None else 0.0,
