@@ -627,20 +627,22 @@ This lets you treat the antenna location as a simple straight-line inset from th
 
 ### Accuracy
 
-Each rover gets an estimated horizontal accuracy from its fix mode:
+Each rover still gets an estimated horizontal accuracy from its fix mode:
 
 - `NO FIX` -> no usable accuracy
-- `GNSS FIX` -> default `5.0 m`
-- `DGPS` -> default `1.5 m`
-- `RTK FLOAT` -> default `0.5 m`
+- `GNSS FIX` -> default `3.0 m`
+- `DGPS` -> default `1.0 m`
+- `RTK FLOAT` -> default `0.2 m`
 - `RTK FIXED` -> default `0.02 m`
 
-### Uncertainty
+### Uncertainty / safety tolerance
 
-Relative uncertainty between two rovers is calculated as root-sum-square:
+Safety tolerance is now loaded from [rover/safety_tolerance_lookup.json](/Users/mustafa/Documents/GitHub/crane-rover/rover/safety_tolerance_lookup.json).
+
+For any local/peer fix-mode pair not present in that lookup, the app falls back to root-sum-square:
 
 ```text
-uncertainty = sqrt(local_accuracy^2 + peer_accuracy^2)
+fallback_tolerance = sqrt(local_accuracy^2 + peer_accuracy^2)
 ```
 
 ### Safe distance
@@ -648,7 +650,7 @@ uncertainty = sqrt(local_accuracy^2 + peer_accuracy^2)
 The conservative safety distance is:
 
 ```text
-safe_distance = max(0, raw_distance - uncertainty)
+safe_distance = max(0, raw_distance - tolerance)
 ```
 
 This means the system assumes the cranes may be closer than the buffer-adjusted GNSS separation suggests.

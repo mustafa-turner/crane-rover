@@ -5,6 +5,7 @@ import logging
 import math
 import socket
 import time
+from pathlib import Path
 
 from rover.state import (
     PeerStatus,
@@ -19,22 +20,59 @@ from rover.state import (
 DEFAULT_FIX_ACCURACY_M = {
     "UNKNOWN": None,
     "NO FIX": None,
-    "GNSS FIX": 10.0,
-    "DGPS": 2.0,
-    "RTK FLOAT": 1.0,
+    "GNSS FIX": 3.0,
+    "DGPS": 1.0,
+    "RTK FLOAT": 0.2,
     "RTK FIXED": 0.02,
     "DEAD RECKONING": 10.0,
 }
 
+SAFETY_TOLERANCE_LOOKUP_PATH = Path(__file__).with_name("safety_tolerance_lookup.json")
+
 PEER_SCHEMA = "crane-rover-peer-v1"
 EARTH_RADIUS_M = 6_371_000.0
+
+
+def load_safety_tolerance_lookup() -> dict[tuple[str, str], float]:
+    try:
+        with SAFETY_TOLERANCE_LOOKUP_PATH.open("r", encoding="utf-8") as f:
+            raw_lookup = json.load(f)
+    except FileNotFoundError:
+        logging.warning("Safety tolerance lookup file not found: %s", SAFETY_TOLERANCE_LOOKUP_PATH)
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        logging.warning("Safety tolerance lookup file invalid: %s", exc)
+        return {}
+
+    lookup: dict[tuple[str, str], float] = {}
+    if not isinstance(raw_lookup, dict):
+        logging.warning("Safety tolerance lookup must be a JSON object")
+        return lookup
+
+    for local_fix_label, peer_map in raw_lookup.items():
+        if not isinstance(peer_map, dict):
+            continue
+        local_key = normalize_fix_label(local_fix_label)
+        for peer_fix_label, tolerance_m in peer_map.items():
+            try:
+                lookup[(local_key, normalize_fix_label(peer_fix_label))] = float(tolerance_m)
+            except (TypeError, ValueError):
+                continue
+    return lookup
+
+
+def normalize_fix_label(fix_label: str | None) -> str:
+    return str(fix_label or "UNKNOWN").strip().upper()
+
+
+SAFETY_TOLERANCE_LOOKUP = load_safety_tolerance_lookup()
 
 
 def estimate_accuracy_m(
     *,
     fix_label: str,
 ) -> float | None:
-    fix_key = (fix_label or "UNKNOWN").upper()
+    fix_key = normalize_fix_label(fix_label)
     return DEFAULT_FIX_ACCURACY_M.get(fix_key)
 
 
@@ -42,6 +80,27 @@ def combined_accuracy_m(local_accuracy_m: float | None, peer_accuracy_m: float |
     if local_accuracy_m is None or peer_accuracy_m is None:
         return None
     return math.sqrt((local_accuracy_m ** 2) + (peer_accuracy_m ** 2))
+
+
+def safety_tolerance_m(
+    *,
+    local_fix_label: str,
+    peer_fix_label: str,
+    local_accuracy_m: float | None,
+    peer_accuracy_m: float | None,
+) -> float | None:
+    local_key = normalize_fix_label(local_fix_label)
+    peer_key = normalize_fix_label(peer_fix_label)
+
+    tolerance_m = SAFETY_TOLERANCE_LOOKUP.get((local_key, peer_key))
+    if tolerance_m is not None:
+        return tolerance_m
+
+    tolerance_m = SAFETY_TOLERANCE_LOOKUP.get((peer_key, local_key))
+    if tolerance_m is not None:
+        return tolerance_m
+
+    return combined_accuracy_m(local_accuracy_m, peer_accuracy_m)
 
 
 def conservative_distance_m(distance_m: float | None, combined_accuracy_m_value: float | None) -> float | None:
@@ -163,7 +222,12 @@ def build_peer_status_from_message(
         )
     distance_m = buffered_distance_m(center_distance_m, local_buffer_distance_m, peer_buffer_distance_m)
 
-    combined_accuracy = combined_accuracy_m(local_accuracy_m, peer_accuracy_m)
+    applied_tolerance_m = safety_tolerance_m(
+        local_fix_label=local["fix_label"],
+        peer_fix_label=peer_fix_label,
+        local_accuracy_m=local_accuracy_m,
+        peer_accuracy_m=peer_accuracy_m,
+    )
 
     return PeerStatus(
         device_id=str(payload["device_id"]),
@@ -176,8 +240,8 @@ def build_peer_status_from_message(
         sent_at=float(payload.get("sent_at", now)),
         received_at=now,
         distance_m=distance_m,
-        combined_accuracy_m=combined_accuracy,
-        conservative_distance_m=conservative_distance_m(distance_m, combined_accuracy),
+        combined_accuracy_m=applied_tolerance_m,
+        conservative_distance_m=conservative_distance_m(distance_m, applied_tolerance_m),
         source_host=source_host,
         max_message_age_sec=float(peer_cfg.get("maxPeerMessageAgeSec", 2.0)),
     )

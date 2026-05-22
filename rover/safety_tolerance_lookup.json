@@ -1,0 +1,20 @@
+{
+  "RTK FIXED": {
+    "RTK FIXED": 0.03,
+    "RTK FLOAT": 0.20,
+    "DGPS": 1.00
+  },
+  "RTK FLOAT": {
+    "RTK FLOAT": 0.28,
+    "DGPS": 1.02
+  },
+  "DGPS": {
+    "DGPS": 1.41
+  },
+  "GNSS FIX": {
+    "RTK FIXED": 5.00,
+    "RTK FLOAT": 5.00,
+    "DGPS": 5.20,
+    "GNSS FIX": 7.00
+  }
+}
