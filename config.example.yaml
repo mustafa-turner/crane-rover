@@ -23,7 +23,7 @@ ntrip:
   mountpoint: your_mountpoint
   username: your_username
   password: your_password
-  maxConsecutiveFailures: 25
+  ggaForwardIntervalSec: 15
 
 tcp:
   host: 192.168.1.50

@@ -72,7 +72,6 @@ FIELD_HELP = {
     "ntrip.mountpoint": "NTRIP mountpoint name.",
     "ntrip.username": "NTRIP username.",
     "ntrip.password": "NTRIP password.",
-    "ntrip.maxConsecutiveFailures": "Stop automatic reconnects after this many consecutive NTRIP failures.",
     "tcp.host": "TCP RTCM source hostname or IP address on the local network.",
     "tcp.port": "TCP RTCM source port for the raw RTCM stream.",
     "logging.level": "Logging verbosity.",

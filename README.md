@@ -302,7 +302,7 @@ ntrip:
   mountpoint: your_mountpoint
   username: your_username
   password: your_password
-  maxConsecutiveFailures: 25
+  ggaForwardIntervalSec: 15
 
 tcp:
   host: 192.168.1.50
@@ -395,8 +395,16 @@ web:
   NTRIP username.
 - `password`
   NTRIP password.
-- `maxConsecutiveFailures`
-  Stops automatic NTRIP reconnects after this many consecutive failures. The default `25` is intentionally well below RTK2GO's documented "hundreds of failed connections" ban range. With the default `5` second reconnect delay, `25` failures is about `125` seconds of retrying before lockout.
+- `ggaForwardIntervalSec`
+  Optional override for GGA uplink cadence. The default is intentionally low at `15` seconds for public caster friendliness.
+
+NTRIP reconnect safety timing is intentionally hard-coded in the application for public-caster use:
+
+- reconnects never start faster than `10` seconds after a failed attempt
+- retries back off through `10`, `20`, `40`, `60`, then `120` seconds and stay capped at `120`
+- the consecutive-failure counter is only reset after at least `60` seconds of stable RTCM reception, not immediately after the HTTP/NTRIP handshake
+- transient socket, timeout, or network failures keep retrying automatically with the capped backoff
+- obvious permanent failures such as `401`, `403`, `404`, rejected mountpoints, or SOURCETABLE responses enter lockout and require the existing manual web reconnect action
 
 ### `tcp`
 

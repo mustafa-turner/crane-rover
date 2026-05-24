@@ -117,6 +117,10 @@ def get_telemetry_payload(rover_name: str = "") -> dict:
         fix_label = STATUS.fix_label
         correction_mode = STATUS.correction_source_mode
         ntrip_connected = STATUS.ntrip_connected
+        ntrip_consecutive_failures = STATUS.ntrip_consecutive_failures
+        ntrip_alert_active = STATUS.ntrip_alert_active
+        ntrip_alert_reason = STATUS.ntrip_alert_reason
+        ntrip_alert_seq = STATUS.ntrip_alert_seq
         last_rtcm_received_at = STATUS.last_rtcm_received_at
         battery_percent = STATUS.battery_percent
         battery_voltage_v = STATUS.battery_voltage_v
@@ -143,6 +147,10 @@ def get_telemetry_payload(rover_name: str = "") -> dict:
         "rtcm_age_sec": round(rtcm_age_sec, 1),
         "fix_mode": FIX_MODE_ENUM.get(fix_label, 0),
         "ntrip_status": NTRIP_STATUS_ENUM[ntrip_connected],
+        "ntrip_retry_count": ntrip_consecutive_failures,
+        "ntrip_alert_active": 1 if ntrip_alert_active else 0,
+        "ntrip_alert_reason": ntrip_alert_reason or "",
+        "ntrip_alert_seq": ntrip_alert_seq,
         "rtcm_source_mode": correction_mode,
         "battery_percent": round(battery_percent, 1) if battery_percent is not None else -1.0,
         "battery_voltage_v": round(battery_voltage_v, 3) if battery_voltage_v is not None else 0.0,
