@@ -9,7 +9,6 @@ from typing import Optional
 from rover.rtcm_common import process_rtcm_data, set_correction_runtime_state
 from rover.state import (
     RtcmStreamInspector,
-    consume_ntrip_reconnect_request,
     get_latest_gga,
     STATUS,
     STATUS_LOCK,
@@ -24,10 +23,6 @@ RTCM_STALE_RECONNECT_SEC = 30
 GNSS_FIX_QUALITY_RECONNECT_SEC = 60
 NTRIP_ALERT_THRESHOLD = 5
 DEFAULT_GGA_FORWARD_INTERVAL_SEC = 15
-
-
-class NtripPermanentError(RuntimeError):
-    pass
 
 
 class NtripReconnectTrigger(RuntimeError):
@@ -95,16 +90,16 @@ def validate_ntrip_response(header: bytes) -> None:
     upper_first_line = first_line.upper()
 
     if "SOURCETABLE" in upper_header:
-        raise NtripPermanentError("NTRIP caster returned SOURCETABLE instead of an RTCM stream")
+        raise RuntimeError("NTRIP caster returned SOURCETABLE instead of an RTCM stream")
 
     if "200 OK" in upper_first_line or "ICY 200 OK" in upper_first_line:
         logging.info("NTRIP connected successfully: %s", first_line)
         return
 
     if any(code in upper_first_line for code in ("401", "403", "404")):
-        raise NtripPermanentError(f"NTRIP server rejected connection: {first_line}")
+        raise RuntimeError(f"NTRIP server rejected connection: {first_line}")
 
-    raise NtripPermanentError(f"NTRIP server rejected connection: {first_line}")
+    raise RuntimeError(f"NTRIP server rejected connection: {first_line}")
 
 
 def reconnect_delay_for_failure_count(consecutive_failures: int) -> int:
@@ -164,24 +159,6 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
     last_rtcm_log_at = 0.0
     consecutive_failures = 0
     recovery_reason_pending: str | None = None
-
-    def wait_for_manual_reconnect(lockout_reason: str) -> bool:
-        set_correction_runtime_state(
-            mode="ntrip",
-            connected=False,
-            last_error=lockout_reason,
-            consecutive_failures=consecutive_failures,
-            locked_out=True,
-            lockout_reason=lockout_reason,
-            next_retry_at=None,
-        )
-        logging.error("%s", lockout_reason)
-
-        while not stop_event.is_set():
-            if consume_ntrip_reconnect_request():
-                return True
-            stop_event.wait(0.2)
-        return False
 
     def record_failure(message: str) -> int:
         nonlocal consecutive_failures
@@ -363,22 +340,6 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
                         if not waiting_for_gga_logged:
                             logging.info("Connected to NTRIP caster and waiting for first GGA before monitoring quality-based reconnect")
                             waiting_for_gga_logged = True
-        except NtripPermanentError as exc:
-            lockout_reason = f"{exc}. Use web reconnect to try again."
-            record_failure(lockout_reason)
-            if wait_for_manual_reconnect(lockout_reason):
-                consecutive_failures = 0
-                recovery_reason_pending = None
-                set_correction_runtime_state(
-                    mode="ntrip",
-                    connected=False,
-                    last_error="Reconnect requested from web viewer",
-                    consecutive_failures=0,
-                    locked_out=False,
-                    lockout_reason=None,
-                    next_retry_at=None,
-                )
-                logging.info("NTRIP reconnect requested from web viewer; resuming attempts")
         except NtripReconnectTrigger as exc:
             if recovery_reason_pending is not None:
                 record_failure(f"{recovery_reason_pending}; reconnect cycle did not restore a stable RTCM stream")
