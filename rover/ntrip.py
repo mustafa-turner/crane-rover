@@ -173,6 +173,7 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
             consecutive_failures=consecutive_failures,
             locked_out=True,
             lockout_reason=lockout_reason,
+            next_retry_at=None,
         )
         logging.error("%s", lockout_reason)
 
@@ -191,6 +192,7 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
             last_error=message,
             consecutive_failures=consecutive_failures,
             locked_out=False,
+            next_retry_at=None,
         )
         update_ntrip_alert_state(consecutive_failures=consecutive_failures, reason=message)
         return consecutive_failures
@@ -207,6 +209,7 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
             consecutive_failures=0,
             locked_out=False,
             lockout_reason=None,
+            next_retry_at=None,
         )
         update_ntrip_alert_state(consecutive_failures=0, clear=True)
 
@@ -267,6 +270,7 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
                 consecutive_failures=consecutive_failures,
                 locked_out=False,
                 lockout_reason=None,
+                next_retry_at=None,
             )
 
             last_rtcm_data_at = time.time()
@@ -372,6 +376,7 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
                     consecutive_failures=0,
                     locked_out=False,
                     lockout_reason=None,
+                    next_retry_at=None,
                 )
                 logging.info("NTRIP reconnect requested from web viewer; resuming attempts")
         except NtripReconnectTrigger as exc:
@@ -385,6 +390,7 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
                 last_response=None,
                 consecutive_failures=consecutive_failures,
                 locked_out=False,
+                next_retry_at=None,
             )
             logging.warning("NTRIP reconnect trigger (%s): %s", exc.reason_code, exc)
         except Exception as exc:
@@ -392,6 +398,15 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
             logging.error("NTRIP error: %s", exc)
             if not stop_event.is_set():
                 reconnect_delay = reconnect_delay_for_failure_count(consecutive_failures)
+                next_retry_at = time.time() + reconnect_delay
+                set_correction_runtime_state(
+                    mode="ntrip",
+                    connected=False,
+                    last_error=str(exc),
+                    consecutive_failures=consecutive_failures,
+                    locked_out=False,
+                    next_retry_at=next_retry_at,
+                )
                 logging.info("Reconnecting NTRIP in %s seconds...", reconnect_delay)
                 time.sleep(reconnect_delay)
         finally:
@@ -401,5 +416,5 @@ def ntrip_loop(ser, ntrip_cfg: dict, rtcm_cfg: dict, stop_event) -> None:
                 except Exception:
                     pass
 
-    set_correction_runtime_state(mode="ntrip", connected=False, locked_out=False)
+    set_correction_runtime_state(mode="ntrip", connected=False, locked_out=False, next_retry_at=None)
     logging.info("NTRIP loop stopped")

@@ -15,12 +15,14 @@ def set_correction_runtime_state(
     consecutive_failures: int | None = None,
     locked_out: bool | None = None,
     lockout_reason: str | None = None,
+    next_retry_at: float | None = None,
 ) -> None:
     with STATUS_LOCK:
         STATUS.correction_source_mode = mode
         STATUS.ntrip_connected = connected
         STATUS.ntrip_last_error = last_error
         STATUS.ntrip_last_response = last_response
+        STATUS.ntrip_next_retry_at = next_retry_at
         if consecutive_failures is not None:
             STATUS.ntrip_consecutive_failures = consecutive_failures
         if locked_out is not None:

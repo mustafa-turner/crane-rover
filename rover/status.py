@@ -29,6 +29,7 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
             ntrip_consecutive_failures = STATUS.ntrip_consecutive_failures
             ntrip_locked_out = STATUS.ntrip_locked_out
             ntrip_lockout_reason = STATUS.ntrip_lockout_reason
+            ntrip_next_retry_at = STATUS.ntrip_next_retry_at
             last_rtcm_received_at = STATUS.last_rtcm_received_at
             last_nmea_at = STATUS.last_nmea_at
             last_gga_at = STATUS.last_gga_at
@@ -82,6 +83,10 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
         if peer_last_receive_at is not None:
             peer_receive_age = f"{now - peer_last_receive_at:.1f}s"
 
+        next_retry_in_sec = "-"
+        if ntrip_next_retry_at is not None:
+            next_retry_in_sec = f"{max(0.0, ntrip_next_retry_at - now):.1f}s"
+
         correction_text = "CONNECTED" if ntrip_connected else "DISCONNECTED"
         correction_source_text = (correction_source_mode or "ntrip").upper()
         battery_present_text = "-"
@@ -109,6 +114,7 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 f"RTCM Response   : {ntrip_last_response or '-'}",
                 f"RTCM Failures   : {ntrip_consecutive_failures}",
                 f"RTCM Lockout    : {'YES' if ntrip_locked_out else 'NO'}",
+                f"Next Retry In   : {next_retry_in_sec}",
                 f"Last RTCM Age   : {rtcm_age}",
                 f"RTCM Bytes      : {rtcm_bytes}",
                 f"RTCM Frames     : {rtcm_frames}",
@@ -145,6 +151,7 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 f"RTCM Source     : {correction_source_text}",
                 f"RTCM Link       : {correction_text}",
                 f"RTCM Failures   : {ntrip_consecutive_failures}",
+                f"Next Retry In   : {next_retry_in_sec}",
                 f"Last RTCM Age   : {rtcm_age}",
                 f"Last NMEA Age   : {nmea_age}",
                 f"Last GGA Age    : {gga_age}",

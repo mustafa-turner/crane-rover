@@ -92,6 +92,7 @@ class RoverStatus:
     ntrip_consecutive_failures: int = 0
     ntrip_locked_out: bool = False
     ntrip_lockout_reason: Optional[str] = None
+    ntrip_next_retry_at: Optional[float] = None
     ntrip_alert_active: bool = False
     ntrip_alert_reason: Optional[str] = None
     ntrip_alert_seq: int = 0
