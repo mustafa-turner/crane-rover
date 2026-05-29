@@ -107,7 +107,22 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
     )
 
 
-def get_telemetry_payload(rover_name: str = "") -> dict:
+def set_if_known(
+    payload: dict,
+    key: str,
+    value,
+    *,
+    include_unknown_sentinels: bool,
+    unknown_value=-1.0,
+) -> None:
+    if value is None:
+        if include_unknown_sentinels:
+            payload[key] = unknown_value
+        return
+    payload[key] = value
+
+
+def get_telemetry_payload(rover_name: str = "", *, include_unknown_sentinels: bool = True) -> dict:
     with STATUS_LOCK:
         lat = STATUS.latitude
         lon = STATUS.longitude
@@ -152,29 +167,62 @@ def get_telemetry_payload(rover_name: str = "") -> dict:
         "ntrip_alert_reason": ntrip_alert_reason or "",
         "ntrip_alert_seq": ntrip_alert_seq,
         "rtcm_source_mode": correction_mode,
-        "battery_percent": round(battery_percent, 1) if battery_percent is not None else -1.0,
         "battery_voltage_v": round(battery_voltage_v, 3) if battery_voltage_v is not None else 0.0,
         "battery_current_a": round(battery_current_a, 3) if battery_current_a is not None else 0.0,
         "battery_power_w": round(battery_power_w, 3) if battery_power_w is not None else 0.0,
         "battery_status": battery_status,
-        "battery_present": 1 if battery_present is True else 0 if battery_present is False else -1,
-        "local_accuracy_m": round(local_horizontal_accuracy_m, 3) if local_horizontal_accuracy_m is not None else -1.0,
-        "nearest_peer_distance_m": round(safety.raw_distance_m, 3) if safety.raw_distance_m is not None else -1.0,
-        "nearest_peer_safe_distance_m": (
-            round(safety.safe_distance_m, 3) if safety.safe_distance_m is not None else -1.0
-        ),
-        "nearest_peer_uncertainty_m": (
-            round(safety.nearest_peer_uncertainty_m, 3) if safety.nearest_peer_uncertainty_m is not None else -1.0
-        ),
-        "nearest_peer_combined_accuracy_m": (
-            round(safety.nearest_peer_uncertainty_m, 3) if safety.nearest_peer_uncertainty_m is not None else -1.0
-        ),
-        "nearest_peer_accuracy_m": (
-            round(safety.nearest_peer_accuracy_m, 3) if safety.nearest_peer_accuracy_m is not None else -1.0
-        ),
         "nearest_peer_fix_mode": FIX_MODE_ENUM.get(safety.nearest_peer_fix_label, 0),
         "nearest_peer_id": safety.nearest_peer_id,
     }
+    set_if_known(
+        payload,
+        "battery_percent",
+        round(battery_percent, 1) if battery_percent is not None else None,
+        include_unknown_sentinels=include_unknown_sentinels,
+    )
+    set_if_known(
+        payload,
+        "battery_present",
+        1 if battery_present is True else 0 if battery_present is False else None,
+        include_unknown_sentinels=include_unknown_sentinels,
+        unknown_value=-1,
+    )
+    set_if_known(
+        payload,
+        "local_accuracy_m",
+        round(local_horizontal_accuracy_m, 3) if local_horizontal_accuracy_m is not None else None,
+        include_unknown_sentinels=include_unknown_sentinels,
+    )
+    set_if_known(
+        payload,
+        "nearest_peer_distance_m",
+        round(safety.raw_distance_m, 3) if safety.raw_distance_m is not None else None,
+        include_unknown_sentinels=include_unknown_sentinels,
+    )
+    set_if_known(
+        payload,
+        "nearest_peer_safe_distance_m",
+        round(safety.safe_distance_m, 3) if safety.safe_distance_m is not None else None,
+        include_unknown_sentinels=include_unknown_sentinels,
+    )
+    set_if_known(
+        payload,
+        "nearest_peer_uncertainty_m",
+        round(safety.nearest_peer_uncertainty_m, 3) if safety.nearest_peer_uncertainty_m is not None else None,
+        include_unknown_sentinels=include_unknown_sentinels,
+    )
+    set_if_known(
+        payload,
+        "nearest_peer_combined_accuracy_m",
+        round(safety.nearest_peer_uncertainty_m, 3) if safety.nearest_peer_uncertainty_m is not None else None,
+        include_unknown_sentinels=include_unknown_sentinels,
+    )
+    set_if_known(
+        payload,
+        "nearest_peer_accuracy_m",
+        round(safety.nearest_peer_accuracy_m, 3) if safety.nearest_peer_accuracy_m is not None else None,
+        include_unknown_sentinels=include_unknown_sentinels,
+    )
     if lat is not None and lon is not None:
         payload["position"] = [lon, lat]
     return payload
@@ -231,6 +279,7 @@ def mqtt_publish_loop(
     on_connect=None,
     on_message=None,
     user_data: dict | None = None,
+    include_unknown_sentinels: bool = True,
 ) -> None:
     broker = str(mqtt_cfg.get("broker", ""))
     port = int(mqtt_cfg.get("port", 1883))
@@ -264,7 +313,10 @@ def mqtt_publish_loop(
             client.loop_start()
 
             while not stop_event.is_set():
-                payload = get_telemetry_payload(rover_name)
+                payload = get_telemetry_payload(
+                    rover_name,
+                    include_unknown_sentinels=include_unknown_sentinels,
+                )
                 client.publish(topic, json.dumps(payload), qos=0, retain=False)
                 logging.debug("Published to %s MQTT topic %s: %s", log_name, topic, payload)
                 stop_event.wait(publish_interval)
@@ -294,6 +346,7 @@ def blynk_loop(blynk_cfg: dict, stop_event) -> None:
         on_connect=on_blynk_connect,
         on_message=on_blynk_message,
         user_data={"blynk_cfg": blynk_cfg},
+        include_unknown_sentinels=False,
     )
 
 
