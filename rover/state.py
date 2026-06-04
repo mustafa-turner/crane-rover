@@ -22,6 +22,9 @@ NTRIP_STATUS_ENUM = {
 
 RTCM_PREAMBLE = 0xD3
 RTCM_CRC24Q_POLY = 0x1864CFB
+RTCM_MSM4_TYPES = {1074, 1084, 1094, 1114, 1124}
+RTCM_MSM5_TYPES = {1075, 1085, 1095, 1115, 1125}
+RTCM_MSM7_TYPES = {1077, 1087, 1097, 1117, 1127}
 RTCM_OBSERVATION_TYPES = {
     1074, 1075, 1077,
     1084, 1085, 1087,
@@ -106,6 +109,8 @@ class RoverStatus:
     rtcm_has_station_frame: bool = False
     rtcm_has_observation_frame: bool = False
     rtcm_recent_types: str = "-"
+    rtcm_type_counts: str = "-"
+    rtcm_msm_profile: str = "-"
     battery_percent: Optional[float] = None
     battery_voltage_v: Optional[float] = None
     battery_current_a: Optional[float] = None
@@ -193,6 +198,28 @@ class RtcmStreamInspector:
             label = RTCM_MESSAGE_NAMES.get(msg_type, "")
             parts.append(f"{msg_type}:{label}" if label else str(msg_type))
         return ", ".join(parts)
+
+    def describe_counts(self) -> str:
+        if not self._type_counter:
+            return "-"
+        parts = []
+        for msg_type, count in sorted(self._type_counter.items()):
+            label = RTCM_MESSAGE_NAMES.get(msg_type, "")
+            name = f"{msg_type}:{label}" if label else str(msg_type)
+            parts.append(f"{name}={count}")
+        return ", ".join(parts)
+
+    def describe_msm_profile(self) -> str:
+        if not self._type_counter:
+            return "-"
+        profiles = []
+        if any(msg_type in RTCM_MSM4_TYPES for msg_type in self._type_counter):
+            profiles.append("MSM4")
+        if any(msg_type in RTCM_MSM5_TYPES for msg_type in self._type_counter):
+            profiles.append("MSM5")
+        if any(msg_type in RTCM_MSM7_TYPES for msg_type in self._type_counter):
+            profiles.append("MSM7")
+        return "+".join(profiles) if profiles else "-"
 
 
 def fix_quality_to_label(quality: Optional[int]) -> str:
@@ -312,6 +339,39 @@ def update_status_from_rtcm(
                 msg_type in RTCM_OBSERVATION_TYPES for msg_type in rtcm_types
             )
             STATUS.rtcm_recent_types = inspector.describe_recent()
+            STATUS.rtcm_type_counts = inspector.describe_counts()
+            STATUS.rtcm_msm_profile = inspector.describe_msm_profile()
+
+
+def rtcm_health_note(
+    *,
+    connected: bool,
+    fix_label: str,
+    rtcm_age_sec: Optional[float],
+    has_station_frame: bool,
+    has_observation_frame: bool,
+    msm_profile: str | None = None,
+    fresh_threshold_sec: float = 5.0,
+) -> str:
+    if not connected:
+        return "RTCM link disconnected"
+    if rtcm_age_sec is None:
+        return "No RTCM received yet"
+    if rtcm_age_sec > fresh_threshold_sec:
+        return f"RTCM stale ({rtcm_age_sec:.1f}s)"
+    if not has_station_frame and not has_observation_frame:
+        return "Fresh RTCM received; no valid ARP/MSM parsed yet"
+    if not has_station_frame:
+        return "Fresh RTCM parsed; missing 1005/1006 ARP"
+    if not has_observation_frame:
+        return "Fresh RTCM parsed; missing MSM observations"
+    if fix_label == "GNSS FIX":
+        profile_text = f" ({msm_profile})" if msm_profile and msm_profile != "-" else ""
+        return f"Fresh RTCM parsed{profile_text}; receiver still reports GNSS FIX"
+    if fix_label == "DGPS":
+        profile_text = f" ({msm_profile})" if msm_profile and msm_profile != "-" else ""
+        return f"Fresh RTCM parsed{profile_text}; receiver reports DGPS, not RTK"
+    return ""
 
 
 def update_status_from_battery(

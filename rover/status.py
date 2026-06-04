@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 
-from rover.state import STATUS, STATUS_LOCK, fmt, fmt_int, fmt_percent
+from rover.state import STATUS, STATUS_LOCK, fmt, fmt_int, fmt_percent, rtcm_health_note
 
 
 DEFAULT_STATUS_INTERVAL_SEC = 0.5
@@ -40,6 +40,8 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
             rtcm_has_station_frame = STATUS.rtcm_has_station_frame
             rtcm_has_observation_frame = STATUS.rtcm_has_observation_frame
             rtcm_recent_types = STATUS.rtcm_recent_types
+            rtcm_type_counts = STATUS.rtcm_type_counts
+            rtcm_msm_profile = STATUS.rtcm_msm_profile
             battery_percent = STATUS.battery_percent
             battery_voltage_v = STATUS.battery_voltage_v
             battery_current_a = STATUS.battery_current_a
@@ -56,8 +58,10 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
 
         now = time.time()
         rtcm_age = "-"
+        rtcm_age_sec = None
         if last_rtcm_received_at is not None:
-            rtcm_age = f"{now - last_rtcm_received_at:.1f}s"
+            rtcm_age_sec = now - last_rtcm_received_at
+            rtcm_age = f"{rtcm_age_sec:.1f}s"
 
         nmea_age = "-"
         if last_nmea_at is not None:
@@ -89,6 +93,14 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
 
         correction_text = "CONNECTED" if ntrip_connected else "DISCONNECTED"
         correction_source_text = (correction_source_mode or "ntrip").upper()
+        rtcm_health = rtcm_health_note(
+            connected=ntrip_connected,
+            fix_label=fix_label,
+            rtcm_age_sec=rtcm_age_sec,
+            has_station_frame=rtcm_has_station_frame,
+            has_observation_frame=rtcm_has_observation_frame,
+            msm_profile=rtcm_msm_profile,
+        )
         battery_present_text = "-"
         if battery_present is True:
             battery_present_text = "YES"
@@ -121,7 +133,9 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 f"RTCM Last Type  : {rtcm_last_type if rtcm_last_type is not None else '-'}",
                 f"RTCM Has ARP    : {'YES' if rtcm_has_station_frame else 'NO'}",
                 f"RTCM Has MSM    : {'YES' if rtcm_has_observation_frame else 'NO'}",
+                f"RTCM MSM Profile: {rtcm_msm_profile}",
                 f"RTCM Recent     : {rtcm_recent_types}",
+                f"RTCM Counts     : {rtcm_type_counts}",
                 f"Last NMEA Age   : {nmea_age}",
                 f"Last GGA Age    : {gga_age}",
                 f"Last GGA Sent   : {gga_sent_age}",
@@ -153,6 +167,11 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 f"RTCM Failures   : {ntrip_consecutive_failures}",
                 f"Next Retry In   : {next_retry_in_sec}",
                 f"Last RTCM Age   : {rtcm_age}",
+                f"RTCM Frames     : {rtcm_frames} ({rtcm_bytes} bytes)",
+                f"RTCM Last Type  : {rtcm_last_type if rtcm_last_type is not None else '-'}",
+                f"RTCM Has ARP/MSM: {'YES' if rtcm_has_station_frame else 'NO'} / {'YES' if rtcm_has_observation_frame else 'NO'}",
+                f"RTCM MSM Profile: {rtcm_msm_profile}",
+                f"RTCM Recent     : {rtcm_recent_types}",
                 f"Last NMEA Age   : {nmea_age}",
                 f"Last GGA Age    : {gga_age}",
                 f"Battery Level   : {fmt_percent(battery_percent)}",
@@ -165,6 +184,8 @@ def status_printer_loop(interval_sec: float, stop_event, console=None, mode: str
                 lines.append(f"Battery Power   : {fmt(battery_power_w, 3)} W")
         if ntrip_last_error:
             lines.append(f"RTCM Error      : {ntrip_last_error}")
+        if rtcm_health:
+            lines.append(f"RTCM Health     : {rtcm_health}")
         if ntrip_lockout_reason and ntrip_lockout_reason != ntrip_last_error:
             lines.append(f"RTCM Lockout    : {ntrip_lockout_reason}")
         if battery_last_error:

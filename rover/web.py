@@ -310,13 +310,30 @@ HTML_PAGE = """<!doctype html>
       const detail = document.getElementById("ntripStatusDetail");
       const lockedOut = data.rover_correction_mode === "ntrip" && data.ntrip_locked_out === true;
       const statusDetail = typeof data.ntrip_status_detail === "string" ? data.ntrip_status_detail : "";
+      const rtcmHealth = typeof data.rover_rtcm_health === "string" ? data.rover_rtcm_health : "";
+      const rtcmMsmProfile = typeof data.rover_rtcm_msm_profile === "string" ? data.rover_rtcm_msm_profile : "";
+      const rtcmRecent = typeof data.rover_rtcm_recent_types === "string" ? data.rover_rtcm_recent_types : "";
+      const rtcmParts = [];
 
       button.hidden = !lockedOut;
       button.disabled = reconnectPending;
       button.textContent = reconnectPending ? "Retrying..." : "Attempt Reconnect";
 
-      detail.hidden = !statusDetail;
-      detail.textContent = statusDetail;
+      if (statusDetail) {
+        rtcmParts.push(statusDetail);
+      }
+      if (rtcmHealth) {
+        rtcmParts.push(rtcmHealth);
+      }
+      if (rtcmMsmProfile && rtcmMsmProfile !== "-") {
+        rtcmParts.push("MSM: " + rtcmMsmProfile);
+      }
+      if (rtcmRecent && rtcmRecent !== "-") {
+        rtcmParts.push("RTCM: " + rtcmRecent);
+      }
+
+      detail.hidden = rtcmParts.length === 0;
+      detail.textContent = rtcmParts.join(" | ");
     }
 
     function applyData(data) {
@@ -440,6 +457,16 @@ def web_viewer_loop(web_cfg: dict, rover_name: str, stop_event) -> None:
                     "ntrip_locked_out": snapshot.rover_ntrip_locked_out,
                     "ntrip_consecutive_failures": snapshot.rover_ntrip_consecutive_failures,
                     "ntrip_status_detail": snapshot.rover_ntrip_status_detail,
+                    "rover_rtcm_age_sec": snapshot.rover_rtcm_age_sec,
+                    "rover_rtcm_bytes": snapshot.rover_rtcm_bytes,
+                    "rover_rtcm_frames": snapshot.rover_rtcm_frames,
+                    "rover_rtcm_last_type": snapshot.rover_rtcm_last_type,
+                    "rover_rtcm_has_arp": snapshot.rover_rtcm_has_arp,
+                    "rover_rtcm_has_msm": snapshot.rover_rtcm_has_msm,
+                    "rover_rtcm_msm_profile": snapshot.rover_rtcm_msm_profile,
+                    "rover_rtcm_recent_types": snapshot.rover_rtcm_recent_types,
+                    "rover_rtcm_type_counts": snapshot.rover_rtcm_type_counts,
+                    "rover_rtcm_health": snapshot.rover_rtcm_health,
                     "nearest_peer_id": snapshot.nearest_peer_id,
                     "nearest_peer_fix_label": snapshot.nearest_peer_fix_label,
                     "safe_distance_m": snapshot.safe_distance_m,

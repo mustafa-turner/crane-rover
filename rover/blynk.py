@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import paho.mqtt.client as mqtt
 
-from rover.state import FIX_MODE_ENUM, NTRIP_STATUS_ENUM, STATUS, STATUS_LOCK
+from rover.state import FIX_MODE_ENUM, NTRIP_STATUS_ENUM, STATUS, STATUS_LOCK, rtcm_health_note
 
 
 @dataclass
@@ -20,6 +20,16 @@ class SafetyViewSnapshot:
     rover_ntrip_locked_out: bool
     rover_ntrip_consecutive_failures: int
     rover_ntrip_status_detail: str
+    rover_rtcm_age_sec: float | None
+    rover_rtcm_bytes: int
+    rover_rtcm_frames: int
+    rover_rtcm_last_type: int | None
+    rover_rtcm_has_arp: bool
+    rover_rtcm_has_msm: bool
+    rover_rtcm_msm_profile: str
+    rover_rtcm_recent_types: str
+    rover_rtcm_type_counts: str
+    rover_rtcm_health: str
     nearest_peer_id: str
     nearest_peer_fix_label: str
     safe_distance_m: float | None
@@ -43,9 +53,29 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
         ntrip_lockout_reason = STATUS.ntrip_lockout_reason
         ntrip_last_error = STATUS.ntrip_last_error
         ntrip_last_response = STATUS.ntrip_last_response
+        last_rtcm_received_at = STATUS.last_rtcm_received_at
+        rtcm_bytes = STATUS.rtcm_bytes
+        rtcm_frames = STATUS.rtcm_frames
+        rtcm_last_type = STATUS.rtcm_last_type
+        rtcm_has_station_frame = STATUS.rtcm_has_station_frame
+        rtcm_has_observation_frame = STATUS.rtcm_has_observation_frame
+        rtcm_msm_profile = STATUS.rtcm_msm_profile
+        rtcm_recent_types = STATUS.rtcm_recent_types
+        rtcm_type_counts = STATUS.rtcm_type_counts
         peers = list(STATUS.peers.values())
 
     now = time.time()
+    rtcm_age_sec = None
+    if last_rtcm_received_at is not None:
+        rtcm_age_sec = max(0.0, now - last_rtcm_received_at)
+    rtcm_health = rtcm_health_note(
+        connected=ntrip_connected,
+        fix_label=fix_label,
+        rtcm_age_sec=rtcm_age_sec,
+        has_station_frame=rtcm_has_station_frame,
+        has_observation_frame=rtcm_has_observation_frame,
+        msm_profile=rtcm_msm_profile,
+    )
     fresh_peers = []
     for peer in peers:
         if peer.received_at is None:
@@ -93,6 +123,16 @@ def get_safety_view_snapshot(rover_name: str = "", threshold_m: float = 25.0) ->
         rover_ntrip_locked_out=ntrip_locked_out,
         rover_ntrip_consecutive_failures=ntrip_consecutive_failures,
         rover_ntrip_status_detail=ntrip_lockout_reason or ntrip_last_error or ntrip_last_response or "",
+        rover_rtcm_age_sec=rtcm_age_sec,
+        rover_rtcm_bytes=rtcm_bytes,
+        rover_rtcm_frames=rtcm_frames,
+        rover_rtcm_last_type=rtcm_last_type,
+        rover_rtcm_has_arp=rtcm_has_station_frame,
+        rover_rtcm_has_msm=rtcm_has_observation_frame,
+        rover_rtcm_msm_profile=rtcm_msm_profile,
+        rover_rtcm_recent_types=rtcm_recent_types,
+        rover_rtcm_type_counts=rtcm_type_counts,
+        rover_rtcm_health=rtcm_health,
         nearest_peer_id=nearest_peer_id,
         nearest_peer_fix_label=nearest_peer_fix_label,
         safe_distance_m=safe_distance_m,
@@ -137,6 +177,14 @@ def get_telemetry_payload(rover_name: str = "", *, include_unknown_sentinels: bo
         ntrip_alert_reason = STATUS.ntrip_alert_reason
         ntrip_alert_seq = STATUS.ntrip_alert_seq
         last_rtcm_received_at = STATUS.last_rtcm_received_at
+        rtcm_bytes = STATUS.rtcm_bytes
+        rtcm_frames = STATUS.rtcm_frames
+        rtcm_last_type = STATUS.rtcm_last_type
+        rtcm_has_station_frame = STATUS.rtcm_has_station_frame
+        rtcm_has_observation_frame = STATUS.rtcm_has_observation_frame
+        rtcm_msm_profile = STATUS.rtcm_msm_profile
+        rtcm_recent_types = STATUS.rtcm_recent_types
+        rtcm_type_counts = STATUS.rtcm_type_counts
         battery_percent = STATUS.battery_percent
         battery_voltage_v = STATUS.battery_voltage_v
         battery_current_a = STATUS.battery_current_a
@@ -149,6 +197,14 @@ def get_telemetry_payload(rover_name: str = "", *, include_unknown_sentinels: bo
     rtcm_age_sec = 999.0
     if last_rtcm_received_at is not None:
         rtcm_age_sec = max(0.0, now - last_rtcm_received_at)
+    rtcm_health = rtcm_health_note(
+        connected=ntrip_connected,
+        fix_label=fix_label,
+        rtcm_age_sec=rtcm_age_sec if last_rtcm_received_at is not None else None,
+        has_station_frame=rtcm_has_station_frame,
+        has_observation_frame=rtcm_has_observation_frame,
+        msm_profile=rtcm_msm_profile,
+    )
 
     safety = get_safety_view_snapshot(rover_name)
 
@@ -160,6 +216,15 @@ def get_telemetry_payload(rover_name: str = "", *, include_unknown_sentinels: bo
         "satellites": sats if sats is not None else 0,
         "hdop": hdop if hdop is not None else 99.0,
         "rtcm_age_sec": round(rtcm_age_sec, 1),
+        "rtcm_bytes": rtcm_bytes,
+        "rtcm_frames": rtcm_frames,
+        "rtcm_last_type": rtcm_last_type if rtcm_last_type is not None else 0,
+        "rtcm_has_arp": 1 if rtcm_has_station_frame else 0,
+        "rtcm_has_msm": 1 if rtcm_has_observation_frame else 0,
+        "rtcm_msm_profile": rtcm_msm_profile,
+        "rtcm_recent_types": rtcm_recent_types,
+        "rtcm_type_counts": rtcm_type_counts,
+        "rtcm_health": rtcm_health,
         "fix_mode": FIX_MODE_ENUM.get(fix_label, 0),
         "ntrip_status": NTRIP_STATUS_ENUM[ntrip_connected],
         "ntrip_retry_count": ntrip_consecutive_failures,

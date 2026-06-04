@@ -685,6 +685,15 @@ That same payload can be sent to Blynk and, if enabled, to a second MQTT broker 
 | `satellites` | `nearest_peer_accuracy_m` |
 | `hdop` | `nearest_peer_fix_mode` |
 | `rtcm_age_sec` |  |
+| `rtcm_bytes` |  |
+| `rtcm_frames` |  |
+| `rtcm_last_type` |  |
+| `rtcm_has_arp` |  |
+| `rtcm_has_msm` |  |
+| `rtcm_msm_profile` |  |
+| `rtcm_recent_types` |  |
+| `rtcm_type_counts` |  |
+| `rtcm_health` |  |
 | `fix_mode` |  |
 | `ntrip_status` |  |
 | `rtcm_source_mode` |  |
@@ -709,6 +718,9 @@ That same payload can be sent to Blynk and, if enabled, to a second MQTT broker 
 - `nearest_peer_fix_mode` as `Integer`
 - `nearest_peer_id` as `String`
 - `local_accuracy_m` as `Double`
+- `rtcm_msm_profile` as `String`
+- `rtcm_recent_types` as `String`
+- `rtcm_health` as `String`
 
 Recommended units:
 
