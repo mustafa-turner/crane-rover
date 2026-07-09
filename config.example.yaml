@@ -57,6 +57,12 @@ peerUdp:
   # Optional extra unicast targets. This is usually where you put
   # ZeroTier peer IP addresses if you want peer updates off-LAN too.
   extraTargets: []
+  # If nearest peer distance would publish as -1 for this many seconds,
+  # exit the app so systemd restarts the service. Use 0.0 to disable.
+  autoRestartOnMissingPeerDistanceSec: 180.0
+  # Wait this long after startup before counting missing peer distance.
+  autoRestartStartupGraceSec: 60.0
+  autoRestartCheckIntervalSec: 5.0
 
 blynk:
   enabled: true

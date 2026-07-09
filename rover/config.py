@@ -61,6 +61,9 @@ PUBLIC_CONFIG_TEMPLATE = {
         "broadcastHost": "255.255.255.255",
         "bufferDistanceM": 0.0,
         "extraTargets": [],
+        "autoRestartOnMissingPeerDistanceSec": 0.0,
+        "autoRestartStartupGraceSec": 60.0,
+        "autoRestartCheckIntervalSec": 5.0,
     },
     "blynk": {
         "enabled": True,

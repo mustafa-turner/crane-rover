@@ -11,6 +11,7 @@ from rover.config import load_config, setup_logging
 from rover.console import SerialConsoleManager
 from rover.gnss import nmea_reader_loop, open_serial
 from rover.peer_udp import peer_udp_loop
+from rover.peer_watchdog import PEER_WATCHDOG_RESTART_EXIT_CODE, peer_distance_watchdog_loop
 from rover.rtcm import correction_loop
 from rover.status import DEFAULT_STATUS_INTERVAL_SEC, status_printer_loop
 from rover.web import web_viewer_loop
@@ -44,6 +45,7 @@ def main() -> int:
 
     ser = open_serial(serial_cfg)
     stop_event = threading.Event()
+    peer_watchdog_restart_requested = threading.Event()
     restart_requested = False
 
     console.start()
@@ -78,6 +80,13 @@ def main() -> int:
         peer_thread = threading.Thread(
             target=peer_udp_loop,
             args=(peer_cfg, stop_event),
+            daemon=True,
+        )
+    peer_watchdog_thread = None
+    if peer_cfg.get("enabled", False):
+        peer_watchdog_thread = threading.Thread(
+            target=peer_distance_watchdog_loop,
+            args=(peer_cfg, peer_watchdog_restart_requested, stop_event),
             daemon=True,
         )
 
@@ -122,6 +131,8 @@ def main() -> int:
         battery_thread.start()
     if peer_thread is not None:
         peer_thread.start()
+    if peer_watchdog_thread is not None:
+        peer_watchdog_thread.start()
     if blynk_thread is not None:
         blynk_thread.start()
     if wifi_thread is not None:
@@ -135,6 +146,9 @@ def main() -> int:
 
     try:
         while True:
+            if peer_watchdog_restart_requested.is_set():
+                logging.error("Restarting because the peer distance watchdog requested it")
+                break
             if console.consume_menu_request():
                 menu_result = console.run_menu(config)
                 if menu_result.restart_requested:
@@ -154,6 +168,8 @@ def main() -> int:
             battery_thread.join(timeout=2)
         if peer_thread is not None:
             peer_thread.join(timeout=2)
+        if peer_watchdog_thread is not None:
+            peer_watchdog_thread.join(timeout=2)
         if blynk_thread is not None:
             blynk_thread.join(timeout=2)
         if wifi_thread is not None:
@@ -167,6 +183,10 @@ def main() -> int:
     if restart_requested:
         logging.shutdown()
         os.execv(sys.executable, [sys.executable, *sys.argv])
+
+    if peer_watchdog_restart_requested.is_set():
+        logging.shutdown()
+        return PEER_WATCHDOG_RESTART_EXIT_CODE
 
     return 0
 

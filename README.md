@@ -460,6 +460,12 @@ This controls peer-to-peer rover awareness.
   Straight-line antenna-to-edge buffer distance in meters for this rover. The app subtracts this rover's value plus the peer rover's value from the center-to-center GNSS separation.
 - `extraTargets`
   Optional list of unicast peer IP addresses. This is typically used for ZeroTier peer addresses.
+- `autoRestartOnMissingPeerDistanceSec`
+  Seconds that peer distance may remain unavailable before the app exits so `systemd` can restart it. This matches the telemetry case where nearest-peer distance fields publish as `-1`. Use `0` to disable. A practical value is `180`.
+- `autoRestartStartupGraceSec`
+  Seconds after app startup before the missing-peer-distance watchdog starts counting. This avoids restarting during normal boot/network warm-up.
+- `autoRestartCheckIntervalSec`
+  Seconds between watchdog checks.
 
 ### `blynk`
 
@@ -585,6 +591,20 @@ The service unit uses:
   So `systemd` restarts it if the process exits or crashes.
 - `RestartSec=5`
   Adds a short delay before restart attempts.
+
+### Restart when peer distance stays `-1`
+
+The Blynk and MQTT payloads publish `-1` for nearest-peer distance fields when the rover has no fresh peer with a usable distance. If restarting the service clears that condition on your rover, enable the peer watchdog:
+
+```yaml
+peerUdp:
+  enabled: true
+  autoRestartOnMissingPeerDistanceSec: 180.0
+  autoRestartStartupGraceSec: 60.0
+  autoRestartCheckIntervalSec: 5.0
+```
+
+With the included `systemd` unit, the app exits with a watchdog restart code after 3 minutes without a usable peer distance, then `Restart=always` starts it again. Use `0.0` for `autoRestartOnMissingPeerDistanceSec` to disable this behavior.
 
 ## Terminal Status Output
 
